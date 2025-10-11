@@ -14,6 +14,8 @@ class FileUpload(BaseModel):
 
 class FileResponse(BaseModel):
     """Schema for file response"""
+    model_config = {"from_attributes": True}
+    
     id: int
     filename: str
     original_filename: str
@@ -24,9 +26,6 @@ class FileResponse(BaseModel):
     source_language: Optional[str]
     uploader_id: int
     created_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 
 class FileMetadata(BaseModel):

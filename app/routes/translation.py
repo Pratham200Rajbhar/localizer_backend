@@ -1,6 +1,7 @@
 """
 Translation routes
 """
+import time
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
@@ -8,18 +9,15 @@ from app.core.db import get_db
 from app.core.security import get_current_user
 from app.core.config import SUPPORTED_LANGUAGES
 from app.models.user import User
-from app.models.job import Job, JobType, JobStatus
 from app.models.file import File as FileModel
 from app.schemas.translation import (
     TranslationRequest,
     TranslationResponse,
+    BatchTranslationResponse,
     LanguageDetectionResponse
 )
-from app.schemas.job import JobResponse
 from app.services.nlp_engine import nlp_engine
-from app.tasks.translation import translate_text_task
 from app.utils.logger import app_logger
-from datetime import datetime
 
 router = APIRouter(tags=["Translation"])
 
@@ -52,16 +50,16 @@ async def detect_language(
         )
 
 
-@router.post("/translate", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post("/translate", response_model=BatchTranslationResponse)
 async def translate(
     request: TranslationRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Translate text or file to target languages
+    Translate text to target languages (direct synchronous processing)
     
-    Returns a job ID that can be used to check status and get results
+    Returns translation results immediately
     """
     # Validate that we have either text or file_id
     if not request.text and not request.file_id:
@@ -70,7 +68,22 @@ async def translate(
             detail="Either 'text' or 'file_id' must be provided"
         )
     
-    # If file_id provided, check it exists
+    # Validate source language is supported
+    if request.source_language not in SUPPORTED_LANGUAGES and request.source_language != "en":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Source language '{request.source_language}' not supported. Choose from 22 Indian languages or English."
+        )
+    
+    # Validate all target languages are supported
+    for target_lang in request.target_languages:
+        if target_lang not in SUPPORTED_LANGUAGES and target_lang != "en":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Target language '{target_lang}' not supported. Choose from 22 Indian languages or English."
+            )
+    
+    # If file_id provided, check it exists and extract text
     if request.file_id:
         file = db.query(FileModel).filter(FileModel.id == request.file_id).first()
         if not file:
@@ -86,103 +99,168 @@ async def translate(
                 detail="Access denied"
             )
         
-        # For now, we'll use dummy text (in production, extract from file)
+        # TODO: In production, extract actual text from file
         text_to_translate = f"Content from file: {file.filename}"
     else:
         text_to_translate = request.text
     
+    if not text_to_translate or len(text_to_translate.strip()) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Text to translate cannot be empty"
+        )
+    
     try:
-        # Create a job for each target language
-        jobs = []
+        # Perform translations directly
+        results = []
+        total_start_time = time.time()
         
         for target_lang in request.target_languages:
-            # Create job entry
-            job = Job(
-                type=JobType.TRANSLATION,
-                status=JobStatus.QUEUED,
-                file_id=request.file_id
+            app_logger.info(
+                f"Starting translation: {request.source_language} -> {target_lang}"
             )
-            db.add(job)
-            db.commit()
-            db.refresh(job)
             
-            # Queue Celery task
-            task = translate_text_task.delay(
-                job_id=job.id,
+            # Direct translation using NLP engine
+            translation_result = nlp_engine.translate(
                 text=text_to_translate,
                 source_lang=request.source_language,
                 target_lang=target_lang,
-                domain=request.domain,
-                apply_localization=request.apply_localization
+                domain=request.domain
             )
             
-            # Update job with Celery task ID
-            job.celery_task_id = task.id
-            db.commit()
+            # Apply localization if requested
+            if request.apply_localization and request.domain:
+                try:
+                    from app.services.localization import localization_engine
+                    localized_result = localization_engine.localize(
+                        translation_result["translated_text"],
+                        target_lang,
+                        request.domain
+                    )
+                    translation_result["translated_text"] = localized_result["localized_text"]
+                    app_logger.info(f"Applied localization for domain: {request.domain}")
+                except Exception as e:
+                    app_logger.warning(f"Localization failed: {e}, using base translation")
             
-            jobs.append(job)
+            # Save translation to database for evaluation/feedback
+            translation_id = None
+            try:
+                app_logger.info(f"Attempting to save translation to database for user: {current_user.id}")
+                from app.models.translation import Translation
+                translation_record = Translation(
+                    user_id=current_user.id,
+                    source_language=translation_result["source_language"],
+                    target_language=translation_result["target_language"],
+                    source_text=text_to_translate,
+                    translated_text=translation_result["translated_text"],
+                    model_used=translation_result["model_used"],
+                    confidence_score=translation_result["confidence_score"],
+                    domain=request.domain,
+                    duration=translation_result["duration"]
+                )
+                app_logger.info("Translation record created, attempting to save...")
+                db.add(translation_record)
+                db.commit()
+                db.refresh(translation_record)
+                translation_id = translation_record.id
+                app_logger.info(f"Translation saved to database with ID: {translation_record.id}")
+            except Exception as db_error:
+                app_logger.error(f"Failed to save translation to database: {db_error}")
+                import traceback
+                app_logger.error(f"Database error traceback: {traceback.format_exc()}")
+                # Don't fail the request if database save fails
+                db.rollback()
+
+            # Create response
+            response = TranslationResponse(
+                translated_text=translation_result["translated_text"],
+                source_language=translation_result["source_language"],
+                target_language=translation_result["target_language"],
+                source_language_name=translation_result["source_language_name"],
+                target_language_name=translation_result["target_language_name"],
+                model_used=translation_result["model_used"],
+                confidence_score=translation_result["confidence_score"],
+                duration=translation_result["duration"],
+                domain=request.domain,
+                translation_id=translation_id
+            )
+            
+            results.append(response)
             
             app_logger.info(
-                f"Translation job queued: {request.source_language}->{target_lang}, "
-                f"job_id={job.id}"
+                f"Translation completed: {request.source_language} -> {target_lang} "
+                f"in {translation_result['duration']:.2f}s"
             )
         
-        # Return the first job (or you could return all jobs)
-        return jobs[0]
+        total_duration = time.time() - total_start_time
+        
+        return BatchTranslationResponse(
+            results=results,
+            total_translations=len(results),
+            total_duration=total_duration
+        )
     
+    except ValueError as e:
+        app_logger.error(f"Translation validation error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     except Exception as e:
         app_logger.error(f"Translation error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error starting translation job"
+            detail="Translation failed"
         )
 
 
-@router.post("/localize/context", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/localize/context")
 async def apply_localization(
-    translation_id: int,
+    text: str,
+    language: str,
     domain: str,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Apply domain-specific and cultural localization to an existing translation
+    Apply domain-specific and cultural localization to text
     """
-    from app.models.translation import Translation
-    from app.services.localization import localization_engine
-    
-    # Get translation
-    translation = db.query(Translation).filter(Translation.id == translation_id).first()
-    if not translation:
+    # Validate language
+    if language not in SUPPORTED_LANGUAGES:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Translation not found"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Language {language} not supported"
+        )
+    
+    if not text or len(text.strip()) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Text cannot be empty"
         )
     
     try:
-        # Apply localization
+        from app.services.localization import localization_engine
+        
+        # Apply localization directly
         result = localization_engine.localize(
-            translation.translated_text,
-            translation.target_language,
-            domain
+            text=text,
+            language=language,
+            domain=domain
         )
         
-        # Update translation
-        translation.translated_text = result["localized_text"]
-        db.commit()
-        
-        app_logger.info(f"Localization applied to translation {translation_id}")
+        app_logger.info(f"Localization applied for {language} in {domain} domain")
         
         return {
-            "status": "success",
-            "translation_id": translation_id,
-            "localized_text": result["localized_text"]
+            "original_text": text,
+            "localized_text": result["localized_text"],
+            "language": language,
+            "domain": domain,
+            "changes_applied": result.get("changes_applied", [])
         }
     
     except Exception as e:
         app_logger.error(f"Localization error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error applying localization"
+            detail=f"Localization failed: {str(e)}"
         )
 

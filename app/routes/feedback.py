@@ -7,7 +7,7 @@ from typing import List
 from app.core.db import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.models.job import Job
+from app.models.translation import Translation
 from app.models.feedback import Feedback
 from app.schemas.feedback import FeedbackCreate, FeedbackResponse
 from app.utils.logger import app_logger
@@ -27,18 +27,18 @@ async def submit_feedback(
     
     Rating: 1-5 stars
     """
-    # Check job exists
-    job = db.query(Job).filter(Job.id == feedback_data.job_id).first()
-    if not job:
+    # Check translation exists
+    translation = db.query(Translation).filter(Translation.id == feedback_data.translation_id).first()
+    if not translation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Job not found"
+            detail="Translation not found"
         )
     
     try:
         # Create feedback
         feedback = Feedback(
-            job_id=feedback_data.job_id,
+            translation_id=feedback_data.translation_id,
             user_id=current_user.id,
             rating=feedback_data.rating,
             comments=feedback_data.comments,
@@ -53,7 +53,7 @@ async def submit_feedback(
         metrics.record_feedback(feedback_data.rating)
         
         app_logger.info(
-            f"Feedback submitted: job_id={feedback_data.job_id}, "
+            f"Feedback submitted: translation_id={feedback_data.translation_id}, "
             f"rating={feedback_data.rating}, user={current_user.username}"
         )
         
@@ -71,7 +71,7 @@ async def submit_feedback(
 async def list_feedback(
     skip: int = 0,
     limit: int = 100,
-    job_id: int = None,
+    translation_id: int = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -82,8 +82,8 @@ async def list_feedback(
     """
     query = db.query(Feedback)
     
-    if job_id:
-        query = query.filter(Feedback.job_id == job_id)
+    if translation_id:
+        query = query.filter(Feedback.translation_id == translation_id)
     
     if current_user.role != "admin":
         query = query.filter(Feedback.user_id == current_user.id)

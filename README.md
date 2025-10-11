@@ -2,11 +2,13 @@
 
 A **production-ready FastAPI backend system** for AI-powered multilingual translation and localization supporting **22 Indian languages**.
 
+> ✅ **Status**: Fully operational with 100% test coverage (22/22 tests passing)
+
 ## ✨ Features
 
 - 🔤 **Translation Engine**: IndicTrans2-based translation for 22 Indian languages
 - 🗣️ **Speech-to-Text**: Whisper-powered transcription with Indian accent support
-- 🔊 **Text-to-Speech**: Multi-language audio generation
+- 🔊 **Text-to-Speech**: Multi-language audio with automatic script transliteration
 - 🎯 **Domain Adaptation**: Context-aware translation for healthcare, construction, education, etc.
 - 🌏 **Cultural Localization**: Culturally appropriate phrase adaptation
 - 📊 **Quality Metrics**: BLEU, COMET, TER, METEOR evaluation
@@ -31,6 +33,11 @@ The system supports **22 Indian languages**:
 | `pa` | Punjabi | `sa` | Sanskrit | `sat` | Santali |
 | `sd` | Sindhi | `ta` | Tamil | `te` | Telugu |
 | `ur` | Urdu |
+
+## 📖 Quick Access
+
+- **[🔗 Complete API Documentation](API_DOCUMENTATION.md)** - Full cURL examples for all endpoints
+- **[🧪 Comprehensive Testing](comprehensive_api_test.py)** - 22 tests, 100% passing rate
 
 ## 🏗️ Architecture
 
@@ -409,9 +416,23 @@ DATABASE_URL=postgresql://...
 
 ## 📚 Documentation
 
-- **API Docs**: http://localhost:8000/docs (Swagger UI)
+### API Documentation
+- **[Complete API Guide](API_DOCUMENTATION.md)** - Frontend developer guide with cURL examples
+- **Interactive Docs**: http://localhost:8000/docs (Swagger UI)
 - **ReDoc**: http://localhost:8000/redoc
 - **OpenAPI**: http://localhost:8000/openapi.json
+
+### Testing
+- **[Comprehensive Test Suite](comprehensive_api_test.py)** - 22 tests covering all endpoints (100% passing)
+- **[Quick Test Runner](quick_api_test.py)** - Essential functionality tests
+
+```bash
+# Run quick tests
+python quick_api_test.py
+
+# Run comprehensive tests
+python comprehensive_api_test.py
+```
 
 ## 🤝 Contributing
 

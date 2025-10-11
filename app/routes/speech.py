@@ -1,18 +1,22 @@
 """
 Speech (STT/TTS) routes
 """
+import os
+import tempfile
+from pathlib import Path
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.security import get_current_user
-from app.core.config import SUPPORTED_LANGUAGES
+from app.core.config import SUPPORTED_LANGUAGES, get_settings
 from app.models.user import User
-from app.models.job import Job, JobType, JobStatus
-from app.schemas.speech import STTRequest, TTSRequest
-from app.schemas.job import JobResponse
-from app.tasks.speech import speech_to_text_task, text_to_speech_task
+from app.schemas.speech import STTRequest, TTSRequest, STTResponse, TTSResponse
+from app.services.speech_engine import speech_engine
 from app.utils.file_manager import file_manager
 from app.utils.logger import app_logger
+
+settings = get_settings()
 
 router = APIRouter(prefix="/speech", tags=["Speech"])
 
@@ -20,15 +24,14 @@ ALLOWED_AUDIO_FORMATS = {".wav", ".mp3", ".mp4", ".m4a", ".ogg", ".flac"}
 MAX_AUDIO_SIZE = 100 * 1024 * 1024  # 100 MB
 
 
-@router.post("/stt", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post("/stt", response_model=STTResponse)
 async def speech_to_text(
     file: UploadFile = File(...),
     language: str = None,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Convert speech to text (Speech-to-Text)
+    Convert speech to text (Speech-to-Text) - Direct processing
     
     Supported formats: WAV, MP3, MP4, M4A, OGG, FLAC
     Maximum size: 100 MB
@@ -49,91 +52,147 @@ async def speech_to_text(
             detail=f"File too large. Maximum size: {MAX_AUDIO_SIZE // (1024*1024)} MB"
         )
     
-    await file.seek(0)
+    # Validate language if provided
+    if language and language not in SUPPORTED_LANGUAGES and language != "en":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Language '{language}' not supported"
+        )
     
     try:
-        # Save audio file
-        saved_file = await file_manager.save_upload(file)
+        # Save audio file temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
+            temp_file.write(content)
+            temp_audio_path = temp_file.name
         
-        # Create job
-        job = Job(
-            type=JobType.STT,
-            status=JobStatus.QUEUED
-        )
-        db.add(job)
-        db.commit()
-        db.refresh(job)
+        app_logger.info(f"Processing STT for file: {file.filename}")
         
-        # Queue Celery task
-        task = speech_to_text_task.delay(
-            job_id=job.id,
-            audio_path=saved_file["file_path"],
+        # Perform STT directly
+        result = speech_engine.speech_to_text(
+            audio_path=temp_audio_path,
             language=language
         )
         
-        job.celery_task_id = task.id
-        db.commit()
+        # Clean up temporary file
+        os.unlink(temp_audio_path)
         
-        app_logger.info(f"STT job queued: job_id={job.id}")
+        app_logger.info(f"STT completed: {result['language_detected']} detected")
         
-        return job
+        return STTResponse(
+            transcript=result["transcript"],
+            language_detected=result["language_detected"],
+            language_name=result["language_name"],
+            confidence=result["confidence"],
+            duration=result["duration"],
+            segments=result["segments"],
+            model_used=result["model_used"]
+        )
     
+    except ValueError as e:
+        # Clean up temp file if it exists
+        try:
+            os.unlink(temp_audio_path)
+        except:
+            pass
+        app_logger.error(f"STT validation error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     except Exception as e:
+        # Clean up temp file if it exists
+        try:
+            os.unlink(temp_audio_path)
+        except:
+            pass
         app_logger.error(f"STT error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error processing speech-to-text request"
+            detail="Speech-to-text processing failed"
         )
 
 
-@router.post("/tts", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post("/tts", response_model=TTSResponse)
 async def text_to_speech(
     request: TTSRequest,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Convert text to speech (Text-to-Speech)
+    Convert text to speech (Text-to-Speech) - Direct processing
     
     Supports all 22 Indian languages
     """
-    # Validate language
-    if request.language not in SUPPORTED_LANGUAGES:
+    # Validate input text
+    if not request.text or len(request.text.strip()) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Language '{request.language}' not supported. Choose from 22 Indian languages"
+            detail="Text cannot be empty"
         )
     
     try:
-        # Create job
-        job = Job(
-            type=JobType.TTS,
-            status=JobStatus.QUEUED
-        )
-        db.add(job)
-        db.commit()
-        db.refresh(job)
+        # Create unique output filename
+        import uuid
+        output_filename = f"tts_{request.language}_{uuid.uuid4().hex[:8]}.wav"
+        output_path = os.path.join(settings.OUTPUT_DIR, output_filename)
         
-        # Queue Celery task
-        task = text_to_speech_task.delay(
-            job_id=job.id,
+        # Ensure output directory exists
+        os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
+        
+        app_logger.info(f"Processing TTS for language: {request.language}")
+        
+        # Perform TTS directly
+        result = speech_engine.text_to_speech(
             text=request.text,
             language=request.language,
+            output_path=output_path,
             voice=request.voice,
             speed=request.speed
         )
         
-        job.celery_task_id = task.id
-        db.commit()
+        app_logger.info(f"TTS completed: {result['language']} audio generated")
         
-        app_logger.info(f"TTS job queued: job_id={job.id}, language={request.language}")
-        
-        return job
+        return TTSResponse(
+            audio_path=result["audio_path"],
+            language=result["language"],
+            language_name=result["language_name"],
+            duration=result["duration"],
+            generation_time=result["generation_time"],
+            format=result["format"]
+        )
     
+    except ValueError as e:
+        app_logger.error(f"TTS validation error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     except Exception as e:
         app_logger.error(f"TTS error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error processing text-to-speech request"
+            detail="Text-to-speech processing failed"
         )
+
+
+@router.get("/tts/download/{filename}")
+async def download_audio(
+    filename: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Download generated audio file
+    """
+    audio_path = os.path.join(settings.OUTPUT_DIR, filename)
+    
+    if not os.path.exists(audio_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Audio file not found"
+        )
+    
+    return FileResponse(
+        path=audio_path,
+        filename=filename,
+        media_type="audio/wav"
+    )
 

@@ -12,7 +12,7 @@ from app.core.config import get_settings
 from app.core.db import init_db
 from app.utils.logger import app_logger
 from app.utils.metrics import get_metrics
-from app.routes import auth, content, translation, speech, feedback, retraining
+from app.routes import auth, content, translation, speech, feedback
 
 settings = get_settings()
 
@@ -89,11 +89,23 @@ async def add_process_time_header(request: Request, call_next):
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Handle validation errors"""
     app_logger.warning(f"Validation error: {exc}")
+    
+    # Convert errors to JSON-serializable format
+    serializable_errors = []
+    for error in exc.errors():
+        serializable_error = {
+            "type": error.get("type", "unknown"),
+            "loc": error.get("loc", []),
+            "msg": str(error.get("msg", "Validation error")),
+            "input": str(error.get("input", ""))
+        }
+        serializable_errors.append(serializable_error)
+    
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "error": "Validation Error",
-            "details": exc.errors()
+            "details": serializable_errors
         }
     )
 
@@ -101,7 +113,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """Handle general exceptions"""
-    app_logger.error(f"Unexpected error: {exc}", exc_info=True)
+    app_logger.error("Unexpected error: {}", str(exc), exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
@@ -128,9 +140,7 @@ async def health_check():
     """Detailed health check"""
     return {
         "status": "healthy",
-        "database": "connected",
-        "redis": "connected",
-        "celery": "running"
+        "database": "connected"
     }
 
 
@@ -147,7 +157,10 @@ app.include_router(content.router)
 app.include_router(translation.router)
 app.include_router(speech.router)
 app.include_router(feedback.router)
-app.include_router(retraining.router)
+
+# Add missing evaluation router
+from app.routes import evaluation
+app.include_router(evaluation.router)
 
 
 if __name__ == "__main__":

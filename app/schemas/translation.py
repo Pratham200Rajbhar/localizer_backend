@@ -31,20 +31,26 @@ class TranslationRequest(BaseModel):
 
 
 class TranslationResponse(BaseModel):
-    """Schema for translation response"""
-    id: int
-    job_id: int
+    """Schema for direct translation response"""
+    model_config = {"protected_namespaces": ()}
+    
+    translated_text: str
     source_language: str
     target_language: str
-    source_text: Optional[str]
-    translated_text: Optional[str]
-    output_path: Optional[str]
-    model_used: Optional[str]
-    confidence_score: Optional[float]
-    created_at: datetime
-    
-    class Config:
-        from_attributes = True
+    source_language_name: str
+    target_language_name: str
+    model_used: str
+    confidence_score: float
+    duration: float
+    domain: Optional[str] = None
+    translation_id: Optional[int] = None
+
+
+class BatchTranslationResponse(BaseModel):
+    """Schema for batch translation response"""
+    results: List[TranslationResponse]
+    total_translations: int
+    total_duration: float
 
 
 class LanguageDetectionResponse(BaseModel):

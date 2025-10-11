@@ -22,14 +22,13 @@ class UserLogin(BaseModel):
 
 class UserResponse(BaseModel):
     """Schema for user response"""
+    model_config = {"from_attributes": True}
+    
     id: int
     username: str
     email: str
     role: str
     created_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 
 class Token(BaseModel):

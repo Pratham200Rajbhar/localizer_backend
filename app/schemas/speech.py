@@ -19,12 +19,16 @@ class STTRequest(BaseModel):
 
 
 class STTResponse(BaseModel):
-    """Schema for STT response"""
-    job_id: int
+    """Schema for direct STT response"""
+    model_config = {"protected_namespaces": ()}
+    
     transcript: str
     language_detected: str
+    language_name: str
     confidence: float
-    output_path: str
+    duration: float
+    segments: list
+    model_used: str
 
 
 class TTSRequest(BaseModel):
@@ -42,10 +46,11 @@ class TTSRequest(BaseModel):
 
 
 class TTSResponse(BaseModel):
-    """Schema for TTS response"""
-    job_id: int
+    """Schema for direct TTS response"""
     audio_path: str
     language: str
+    language_name: str
     duration: float
-    format: str = "mp3"
+    generation_time: float
+    format: str
 
