@@ -1,0 +1,377 @@
+---
+alwaysApply: true
+---
+# 🧠 BACKEND + AI MASTER PROMPT
+
+### 🚀 PROJECT GOAL
+
+Develop a **complete, production-ready backend system** using **FastAPI** that combines:
+
+1. AI-Powered Multilingual Translation & Localization (for 22 Indian languages only)
+2. Cultural & Domain Adaptation
+3. Speech-to-Text (STT) + Text-to-Speech (TTS) for accessibility
+4. Feedback-based model evaluation & continuous retraining
+5. Full local storage (no AWS or cloud dependencies)
+6. PostgreSQL database persistence
+7. Celery + Redis for background task queue
+8. Secure JWT authentication with RBAC (Admin, Uploader, Reviewer)
+
+All models and assets must run **locally** on your **DigitalOcean Linux server** — GPU optional but supported.
+
+---
+
+## ⚙️ TECH STACK OVERVIEW
+
+| Layer           | Technology                                                             |
+| :-------------- | :--------------------------------------------------------------------- |
+| Framework       | **FastAPI** (Python 3.11)                                              |
+| Database        | **PostgreSQL 15+** (via SQLAlchemy + Alembic)                          |
+| Task Queue      | **Celery + Redis**                                                     |
+| Storage         | **Local filesystem** (`/app/storage/uploads`, `/app/storage/outputs`)  |
+| Authentication  | **OAuth2 + JWT (passlib bcrypt)**                                      |
+| AI / NLP Models | **IndicBERT**, **mBART-Indic**, **IndicTrans2**, **NLLB-Indic subset** |
+| Speech Models   | **Whisper (STT)**, **VITS or Tacotron2 + HiFi-GAN (TTS)**              |
+| ML Frameworks   | PyTorch + HuggingFace Transformers                                     |
+| Evaluation      | BLEU, COMET scores                                                     |
+| MLOps           | MLflow (optional), retraining hooks                                    |
+| Deployment      | Docker + docker-compose                                                |
+| Monitoring      | Prometheus metrics endpoint + structured logs                          |
+| Logging         | Rich + Loguru                                                          |
+| Version Control | Git + DVC (for datasets)                                               |
+
+---
+
+## 📦 DIRECTORY STRUCTURE
+
+```
+/backend
+ ├── app/
+ │   ├── main.py
+ │   ├── core/
+ │   │   ├── config.py
+ │   │   ├── db.py
+ │   │   ├── security.py
+ │   │   └── celery_app.py
+ │   ├── routes/
+ │   │   ├── auth.py
+ │   │   ├── content.py
+ │   │   ├── translation.py
+ │   │   ├── speech.py
+ │   │   ├── feedback.py
+ │   │   └── retraining.py
+ │   ├── models/
+ │   ├── schemas/
+ │   ├── services/
+ │   │   ├── nlp_engine.py
+ │   │   ├── speech_engine.py
+ │   │   ├── localization.py
+ │   │   └── retrain_manager.py
+ │   └── utils/
+ │       ├── file_manager.py
+ │       ├── logger.py
+ │       └── metrics.py
+ ├── storage/
+ │   ├── uploads/
+ │   └── outputs/
+ ├── scripts/
+ │   └── retrain.sh
+ ├── docker-compose.yml
+ ├── Dockerfile
+ ├── requirements.txt
+ └── README.md
+```
+
+---
+
+## ⚙️ .ENV CONFIGURATION (Local Setup)
+
+```
+DATABASE_URL=postgresql://username:password@postgres:5432/localizer
+SECRET_KEY=supersecretkey
+REDIS_URL=redis://redis:6379/0
+STORAGE_DIR=/app/storage
+UPLOAD_DIR=/app/storage/uploads
+OUTPUT_DIR=/app/storage/outputs
+JWT_EXPIRATION=3600
+ENVIRONMENT=production
+```
+
+---
+
+## 🧩 SUPPORTED LANGUAGES (22+ INDIAN LANGUAGES ONLY)
+
+The system must **strictly** support **only** the following languages (ISO 639-1 codes):
+
+```python
+SUPPORTED_LANGUAGES = {
+  "as": "Assamese",
+  "bn": "Bengali",
+  "brx": "Bodo",
+  "doi": "Dogri",
+  "gu": "Gujarati",
+  "hi": "Hindi",
+  "kn": "Kannada",
+  "ks": "Kashmiri",
+  "kok": "Konkani",
+  "mai": "Maithili",
+  "ml": "Malayalam",
+  "mni": "Manipuri",
+  "mr": "Marathi",
+  "ne": "Nepali",
+  "or": "Odia",
+  "pa": "Punjabi",
+  "sa": "Sanskrit",
+  "sat": "Santali",
+  "sd": "Sindhi",
+  "ta": "Tamil",
+  "te": "Telugu",
+  "ur": "Urdu"
+}
+```
+
+**If a user requests translation or TTS for any non-supported language, return HTTP 400:**
+
+```json
+{"error": "Language not supported — choose one of 22 Indian languages"}
+```
+
+Also expose an endpoint:
+
+```python
+@app.get("/supported-languages")
+def supported_languages():
+    return {"languages": SUPPORTED_LANGUAGES}
+```
+
+---
+
+## 🧠 AI MODEL INTEGRATION DETAILS
+
+### 🧩 Translation Engine (NLP)
+
+* **Models:**
+
+  * `ai4bharat/IndicTrans2-en-indic`
+  * `ai4bharat/IndicTrans2-indic-en`
+  * `ai4bharat/IndicBERT`
+  * `facebook/nllb-200-distilled-600M` (restrict to Indic pairs)
+* **Framework:** PyTorch + HuggingFace Transformers
+* **Pipeline:**
+
+  1. Load model + tokenizer at startup
+  2. Translate sentence-wise with batching
+  3. Apply contextual post-processing (NER-based term preservation)
+  4. Save output as JSON file per target language
+
+Example pseudo-code:
+
+```python
+model = AutoModelForSeq2SeqLM.from_pretrained("ai4bharat/IndicTrans2-en-indic")
+tokenizer = AutoTokenizer.from_pretrained("ai4bharat/IndicTrans2-en-indic")
+translated = tokenizer.batch_decode(model.generate(inputs), skip_special_tokens=True)
+```
+
+---
+
+### 🧩 Context & Cultural Localization Layer
+
+* Use JSON domain vocabulary: `/app/data/vocabs/<domain>.json`
+* Map technical words (e.g., healthcare, construction)
+* Modify idioms/phrases regionally:
+
+  * Example: “Electrician safety gear” → “विद्युत सुरक्षा उपकरण” (Hindi)
+* Implement a rule-based layer for Indian cultural adaptation.
+
+---
+
+### 🗣 Speech Layer
+
+#### Speech-to-Text (STT)
+
+* Model: `openai/whisper-large-v3`
+* Fine-tuned for Indian accents (Hindi, Tamil, Bengali, etc.)
+* Functionality:
+
+  * Accept `.wav`, `.mp3`, or `.mp4`
+  * Transcribe to text (UTF-8)
+  * Save as `transcript.txt` in `outputs/<job_id>/`
+
+#### Text-to-Speech (TTS)
+
+* Model: `coqui-ai/TTS` or `VITS/Tacotron2 + HiFi-GAN`
+* Use `IndicTTS` dataset or multilingual voicebanks
+* Generate `.mp3` output for target language voice
+* Example command:
+
+```python
+tts_model.tts_to_file(text=translated_text, speaker="hi_male", file_path="/outputs/tts_hi.mp3")
+```
+
+---
+
+## 📊 EVALUATION & RETRAINING
+
+### BLEU/COMET Evaluation
+
+* Run local scoring via SacreBLEU & COMET
+* Store results in PostgreSQL (`evaluations` table)
+
+### Retraining Endpoint
+
+* `/retrain/trigger` → Launch Celery task to execute `scripts/retrain.sh`
+* Retrain model based on feedback and evaluation score thresholds
+
+Sample retraining trigger:
+
+```bash
+python retrain_model.py --domain healthcare --epochs 3
+```
+
+---
+
+## 🧱 DATABASE SCHEMA (PostgreSQL)
+
+| Table          | Columns                                             |
+| :------------- | :-------------------------------------------------- |
+| `users`        | id, username, password_hash, role                   |
+| `files`        | id, filename, path, domain, uploader_id, created_at |
+| `jobs`         | id, file_id, type, status, progress, result_path    |
+| `translations` | id, job_id, language, output_path, model_used       |
+| `feedback`     | id, job_id, user_id, rating, comments, corrections  |
+| `evaluations`  | id, job_id, bleu, comet, created_at                 |
+
+---
+
+## 🔌 FULL API ENDPOINTS
+
+| Endpoint               | Method | Description                            |
+| :--------------------- | :----- | :------------------------------------- |
+| `/auth/register`       | POST   | Register new user (admin only)         |
+| `/auth/login`          | POST   | User login + JWT                       |
+| `/content/upload`      | POST   | Upload content to local `/uploads`     |
+| `/detect-language`     | POST   | Auto-detect source language            |
+| `/translate`           | POST   | Translate to selected target languages |
+| `/localize/context`    | POST   | Apply domain & cultural localization   |
+| `/speech/stt`          | POST   | Speech → text (Whisper)                |
+| `/speech/tts`          | POST   | Text → speech (VITS/TTS)               |
+| `/feedback`            | POST   | Store user feedback                    |
+| `/evaluate/run`        | POST   | Compute BLEU/COMET score               |
+| `/retrain/trigger`     | POST   | Launch retraining pipeline             |
+| `/jobs/{id}`           | GET    | Check Celery job status                |
+| `/metrics`             | GET    | Prometheus metrics                     |
+| `/supported-languages` | GET    | Return 22 supported language codes     |
+
+---
+
+## 📂 LOCAL STORAGE STRUCTURE
+
+```
+/app/storage/
+ ├── uploads/
+ │   ├── <file_id>/
+ │   │    ├── original.pdf
+ │   │    └── metadata.json
+ └── outputs/
+      ├── <job_id>/
+      │    ├── translation_hi.json
+      │    ├── tts_hi.mp3
+      │    ├── transcript.txt
+      │    └── logs.txt
+```
+
+---
+
+## 🔧 TASK FLOW (Celery)
+
+1️⃣ Upload file → store metadata
+2️⃣ Detect language
+3️⃣ Trigger translation tasks per target language
+4️⃣ Apply localization layer
+5️⃣ Run STT or TTS if requested
+6️⃣ Store output → record in DB
+7️⃣ Notify job complete
+8️⃣ Collect feedback & evaluation
+
+Each Celery task must log progress and update PostgreSQL status (`queued`, `running`, `completed`, `failed`).
+
+---
+
+## 🧪 ERROR HANDLING
+
+* Invalid file format → HTTP 415
+* Unsupported language → HTTP 400
+* Invalid JWT / expired → HTTP 401
+* Missing domain vocabulary → warning log
+* Failed translation → auto retry (3 attempts)
+
+---
+
+## 📈 MONITORING
+
+* `/metrics` exposes:
+
+  * Translation job duration (histogram)
+  * Celery queue size
+  * BLEU/COMET average
+  * Active models loaded
+* Logs stored in `/logs/app.log`
+
+---
+
+## 🧰 LOCAL RUN COMMANDS
+
+```bash
+docker-compose up --build
+```
+
+Access the backend:
+➡️ `http://localhost:8000/docs`
+
+For production (DigitalOcean):
+
+```bash
+sudo docker-compose up -d
+sudo systemctl enable docker
+```
+
+---
+
+## 📦 REQUIREMENTS.TXT EXAMPLE
+
+```
+fastapi
+uvicorn
+sqlalchemy
+alembic
+psycopg2-binary
+celery
+redis
+pydantic
+passlib[bcrypt]
+python-jose[cryptography]
+transformers
+torch
+whisper
+coqui-tts
+sacrebleu
+comet-ml
+prometheus-client
+loguru
+rich
+```
+
+---
+
+## ✅ EXPECTED OUTPUT
+
+After Cursor/Copilot builds the backend:
+
+* You get a **fully working FastAPI + AI system** that:
+
+  * Translates & localizes only 22 Indian languages
+  * Performs real Whisper-based STT
+  * Generates real audio using TTS
+  * Stores files locally under `/storage/`
+  * Supports Celery background jobs
+  * Exposes `/supported-languages` endpoint
+  * Is production-deployable on your DigitalOcean Linux server
