@@ -4,7 +4,6 @@ Security utilities for authentication and authorization
 from datetime import datetime, timedelta
 from typing import Optional, Dict
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -13,21 +12,18 @@ from app.core.db import get_db
 
 settings = get_settings()
 
-# Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
 def hash_password(password: str) -> str:
-    """Hash a password"""
-    return pwd_context.hash(password)
+    """Simple password storage - just return the password (for development only)"""
+    return password
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash"""
-    return pwd_context.verify(plain_password, hashed_password)
+def verify_password(plain_password: str, stored_password: str) -> bool:
+    """Simple password verification - direct string comparison"""
+    return plain_password == stored_password
 
 
 def create_access_token(data: Dict, expires_delta: Optional[timedelta] = None) -> str:

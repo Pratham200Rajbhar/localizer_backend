@@ -25,8 +25,9 @@ class TranslationRequest(BaseModel):
     @validator("target_languages")
     def validate_target_languages(cls, v):
         for lang in v:
-            if lang not in SUPPORTED_LANGUAGES:
-                raise ValueError(f"Target language '{lang}' not supported. Choose from 22 Indian languages")
+            # Allow English ('en') as a valid target in addition to the supported Indian languages
+            if lang != "en" and lang not in SUPPORTED_LANGUAGES:
+                raise ValueError(f"Target language '{lang}' not supported. Choose from 22 Indian languages or 'en'")
         return v
 
 

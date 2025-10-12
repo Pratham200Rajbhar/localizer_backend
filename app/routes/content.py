@@ -14,8 +14,84 @@ from app.utils.logger import app_logger
 
 router = APIRouter(prefix="/content", tags=["Content"])
 
-ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".doc", ".odt", ".rtf"}
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
+# Add simple upload router for direct /upload endpoint
+upload_router = APIRouter(tags=["Upload"])
+
+ALLOWED_EXTENSIONS = {".txt", ".pdf", ".mp3", ".mp4", ".wav", ".docx", ".doc", ".odt", ".rtf"}
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB (increased for audio/video files)
+
+
+@upload_router.post("/upload")
+async def upload_simple(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Simple upload endpoint - saves to storage/uploads/<id>/
+    Supports: .txt, .pdf, .mp3, .mp4
+    """
+    import uuid
+    import os
+    from pathlib import Path
+    
+    # Validate file extension
+    file_ext = "." + file.filename.split(".")[-1].lower() if "." in file.filename else ""
+    if file_ext not in {".txt", ".pdf", ".mp3", ".mp4"}:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"File type not supported. Allowed types: .txt, .pdf, .mp3, .mp4"
+        )
+    
+    # Read file content
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024*1024)} MB"
+        )
+    
+    try:
+        # Create unique ID and directory
+        file_id = str(uuid.uuid4())
+        upload_dir = Path("storage/uploads") / file_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Save file
+        file_path = upload_dir / file.filename
+        with open(file_path, "wb") as f:
+            f.write(content)
+        
+        # Create metadata
+        metadata = {
+            "id": file_id,
+            "filename": file.filename,
+            "size": len(content),
+            "content_type": file.content_type,
+            "upload_path": str(file_path)
+        }
+        
+        # Save metadata
+        metadata_path = upload_dir / "metadata.json"
+        import json
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2)
+        
+        app_logger.info(f"File uploaded: {file_id} - {file.filename}")
+        
+        return {
+            "file_id": file_id,
+            "filename": file.filename,
+            "size": len(content),
+            "path": str(file_path),
+            "status": "uploaded"
+        }
+        
+    except Exception as e:
+        app_logger.error(f"Upload error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to upload file"
+        )
 
 
 @router.post("/upload", response_model=FileResponse, status_code=status.HTTP_201_CREATED)
@@ -29,8 +105,8 @@ async def upload_file(
     """
     Upload a content file for translation
     
-    Supported formats: PDF, DOCX, TXT, DOC, ODT, RTF
-    Maximum size: 50 MB
+    Supported formats: TXT, PDF, MP3, MP4, WAV, DOCX, DOC, ODT, RTF
+    Maximum size: 100 MB
     """
     # Validate file extension
     file_ext = "." + file.filename.split(".")[-1].lower() if "." in file.filename else ""

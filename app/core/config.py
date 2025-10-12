@@ -23,10 +23,10 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = "redis://redis:6379/0"
     
     # Storage
-    STORAGE_DIR: str = "/app/storage"
-    UPLOAD_DIR: str = "/app/storage/uploads"
-    OUTPUT_DIR: str = "/app/storage/outputs"
-    MODEL_DIR: str = "/app/models"
+    STORAGE_DIR: str = "storage"
+    UPLOAD_DIR: str = "storage/uploads"
+    OUTPUT_DIR: str = "storage/outputs"
+    MODEL_DIR: str = "models"
     
     # Environment
     ENVIRONMENT: str = "production"
@@ -37,10 +37,9 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Indian Language Localizer"
     
     # Models
-    TRANSLATION_MODEL_EN_INDIC: str = "ai4bharat/IndicTrans2-en-indic-1B"
-    TRANSLATION_MODEL_INDIC_EN: str = "ai4bharat/IndicTrans2-indic-en-1B"
+    TRANSLATION_MODEL: str = "meta-llama/Meta-Llama-3-8B-Instruct"
     WHISPER_MODEL: str = "openai/whisper-large-v3"
-    TTS_MODEL: str = "tts_models/multilingual/multi-dataset/your_tts"
+    TTS_MODEL: str = "tts_models/en/vctk/vits"
     
     class Config:
         env_file = ".env"
@@ -57,7 +56,6 @@ SUPPORTED_LANGUAGES: Dict[str, str] = {
     "hi": "Hindi",
     "kn": "Kannada",
     "ks": "Kashmiri",
-    "kok": "Konkani",
     "mai": "Maithili",
     "ml": "Malayalam",
     "mni": "Manipuri",

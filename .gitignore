@@ -20,6 +20,10 @@ wheels/
 .installed.cfg
 *.egg
 
+#models
+saved_model/
+storage/
+
 # Virtual Environment
 venv/
 ENV/

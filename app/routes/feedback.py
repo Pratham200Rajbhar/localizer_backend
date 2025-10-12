@@ -15,6 +15,89 @@ from app.utils.metrics import metrics
 
 router = APIRouter(prefix="/feedback", tags=["Feedback"])
 
+# Simple feedback router for direct /feedback endpoint
+simple_router = APIRouter(tags=["Simple Feedback"])
+
+
+@simple_router.post("/feedback")
+async def submit_simple_feedback(
+    request: dict,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Simple feedback endpoint - saves rating/comments to storage/feedback.json
+    Expected JSON: {"rating": 1-5, "comments": "optional"}
+    """
+    import json
+    import os
+    from datetime import datetime
+    from pathlib import Path
+    
+    # Extract parameters from request
+    rating = request.get("rating")
+    comments = request.get("comments", "")
+    
+    # Validate rating
+    if rating is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Rating is required"
+        )
+    
+    if not isinstance(rating, int) or not 1 <= rating <= 5:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Rating must be an integer between 1 and 5"
+        )
+    
+    try:
+        # Create feedback entry
+        feedback_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "user_id": current_user.id,
+            "username": current_user.username,
+            "rating": rating,
+            "comments": comments
+        }
+        
+        # Ensure storage directory exists
+        storage_dir = Path("storage")
+        storage_dir.mkdir(exist_ok=True)
+        
+        feedback_file = storage_dir / "feedback.json"
+        
+        # Load existing feedback or create new list
+        feedback_list = []
+        if feedback_file.exists():
+            try:
+                with open(feedback_file, "r") as f:
+                    feedback_list = json.load(f)
+            except json.JSONDecodeError:
+                feedback_list = []
+        
+        # Add new feedback
+        feedback_list.append(feedback_entry)
+        
+        # Save back to file
+        with open(feedback_file, "w") as f:
+            json.dump(feedback_list, f, indent=2)
+        
+        app_logger.info(f"Feedback saved: {rating} stars - {current_user.username}")
+        
+        return {
+            "status": "success",
+            "message": "Feedback saved successfully",
+            "rating": rating,
+            "comments": comments
+        }
+        
+    except Exception as e:
+        app_logger.error(f"Feedback save error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save feedback"
+        )
+
 
 @router.post("", response_model=FeedbackResponse, status_code=status.HTTP_201_CREATED)
 async def submit_feedback(

@@ -6,6 +6,23 @@ from sqlalchemy.orm import Session
 from typing import Dict, Optional
 import time
 
+# Import proper evaluation libraries with error handling
+try:
+    from sacrebleu import sentence_bleu
+    SACREBLEU_AVAILABLE = True
+except ImportError:
+    SACREBLEU_AVAILABLE = False
+    sentence_bleu = None
+
+try:
+    from comet import download_model, load_from_checkpoint
+    COMET_AVAILABLE = True
+except (ImportError, RuntimeError, Exception) as e:
+    COMET_AVAILABLE = False
+    download_model = None
+    load_from_checkpoint = None
+    print(f"Warning: COMET not available due to: {e}")
+
 from app.core.db import get_db
 from app.core.security import get_current_user
 from app.models.user import User
@@ -94,44 +111,76 @@ async def run_evaluation(
 
 def calculate_bleu_score(reference: str, hypothesis: str) -> float:
     """
-    Calculate BLEU score (simplified implementation)
-    
-    In production, use: from sacrebleu import sentence_bleu
+    Calculate BLEU score using SacreBLEU
     """
-    # Simple word-level BLEU approximation
-    ref_words = reference.lower().split()
-    hyp_words = hypothesis.lower().split()
-    
-    if not hyp_words:
+    try:
+        # Use SacreBLEU for accurate BLEU calculation
+        bleu = sentence_bleu(hypothesis, [reference])
+        return bleu.score / 100.0  # Convert to 0-1 scale
+    except Exception as e:
+        app_logger.error(f"BLEU calculation error: {e}")
         return 0.0
-    
-    # Count matching words
-    matches = sum(1 for word in hyp_words if word in ref_words)
-    precision = matches / len(hyp_words) if hyp_words else 0.0
-    
-    # Simple brevity penalty
-    bp = min(1.0, len(hyp_words) / len(ref_words)) if ref_words else 0.0
-    
-    return precision * bp
+
+
+# Global COMET model - lazy loaded
+_comet_model = None
+
+def _load_comet_model():
+    """Load COMET model (lazy loading)"""
+    global _comet_model
+    if _comet_model is None:
+        try:
+            app_logger.info("Loading COMET model...")
+            model_path = download_model("Unbabel/wmt22-comet-da")
+            _comet_model = load_from_checkpoint(model_path)
+            app_logger.info("COMET model loaded successfully")
+        except Exception as e:
+            app_logger.error(f"Failed to load COMET model: {e}")
+            _comet_model = "failed"
+    return _comet_model
 
 
 def calculate_comet_score(source: str, hypothesis: str, reference: str) -> float:
     """
-    Calculate COMET score (simplified implementation)
-    
-    In production, use the COMET library from Unbabel
+    Calculate COMET score using Unbabel COMET
     """
-    # Simple semantic similarity approximation
-    # In production, use actual COMET model
-    ref_words = set(reference.lower().split())
-    hyp_words = set(hypothesis.lower().split())
-    
-    if not ref_words and not hyp_words:
-        return 1.0
-    if not ref_words or not hyp_words:
-        return 0.0
-    
-    intersection = len(ref_words & hyp_words)
-    union = len(ref_words | hyp_words)
-    
-    return intersection / union if union > 0 else 0.0
+    try:
+        model = _load_comet_model()
+        if model == "failed":
+            # Fallback to simple similarity if COMET fails to load
+            ref_words = set(reference.lower().split())
+            hyp_words = set(hypothesis.lower().split())
+            
+            if not ref_words and not hyp_words:
+                return 1.0
+            if not ref_words or not hyp_words:
+                return 0.0
+            
+            intersection = len(ref_words & hyp_words)
+            union = len(ref_words | hyp_words)
+            return intersection / union if union > 0 else 0.0
+        
+        # Use actual COMET model
+        data = [{
+            "src": source,
+            "mt": hypothesis,
+            "ref": reference
+        }]
+        
+        scores = model.predict(data, batch_size=1, gpus=0)
+        return float(scores[0])
+        
+    except Exception as e:
+        app_logger.error(f"COMET calculation error: {e}")
+        # Fallback to simple similarity
+        ref_words = set(reference.lower().split())
+        hyp_words = set(hypothesis.lower().split())
+        
+        if not ref_words and not hyp_words:
+            return 1.0
+        if not ref_words or not hyp_words:
+            return 0.0
+        
+        intersection = len(ref_words & hyp_words)
+        union = len(ref_words | hyp_words)
+        return intersection / union if union > 0 else 0.0

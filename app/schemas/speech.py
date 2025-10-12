@@ -40,7 +40,8 @@ class TTSRequest(BaseModel):
     
     @validator("language")
     def validate_language(cls, v):
-        if v not in SUPPORTED_LANGUAGES:
+        # Allow English ('en') in addition to the supported Indian languages
+        if v != "en" and v not in SUPPORTED_LANGUAGES:
             raise ValueError(f"Language '{v}' not supported for TTS")
         return v
 

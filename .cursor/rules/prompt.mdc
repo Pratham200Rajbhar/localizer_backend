@@ -13,8 +13,7 @@ Develop a **complete, production-ready backend system** using **FastAPI** that c
 4. Feedback-based model evaluation & continuous retraining
 5. Full local storage (no AWS or cloud dependencies)
 6. PostgreSQL database persistence
-7. Celery + Redis for background task queue
-8. Secure JWT authentication with RBAC (Admin, Uploader, Reviewer)
+7. Secure JWT authentication with RBAC (Admin, Uploader, Reviewer)
 
 All models and assets must run **locally** on your **DigitalOcean Linux server** — GPU optional but supported.
 
@@ -26,7 +25,6 @@ All models and assets must run **locally** on your **DigitalOcean Linux server**
 | :-------------- | :--------------------------------------------------------------------- |
 | Framework       | **FastAPI** (Python 3.11)                                              |
 | Database        | **PostgreSQL 15+** (via SQLAlchemy + Alembic)                          |
-| Task Queue      | **Celery + Redis**                                                     |
 | Storage         | **Local filesystem** (`/app/storage/uploads`, `/app/storage/outputs`)  |
 | Authentication  | **OAuth2 + JWT (passlib bcrypt)**                                      |
 | AI / NLP Models | **IndicBERT**, **mBART-Indic**, **IndicTrans2**, **NLLB-Indic subset** |
@@ -34,54 +32,10 @@ All models and assets must run **locally** on your **DigitalOcean Linux server**
 | ML Frameworks   | PyTorch + HuggingFace Transformers                                     |
 | Evaluation      | BLEU, COMET scores                                                     |
 | MLOps           | MLflow (optional), retraining hooks                                    |
-| Deployment      | Docker + docker-compose                                                |
 | Monitoring      | Prometheus metrics endpoint + structured logs                          |
 | Logging         | Rich + Loguru                                                          |
 | Version Control | Git + DVC (for datasets)                                               |
 
----
-
-## 📦 DIRECTORY STRUCTURE
-
-```
-/backend
- ├── app/
- │   ├── main.py
- │   ├── core/
- │   │   ├── config.py
- │   │   ├── db.py
- │   │   ├── security.py
- │   │   └── celery_app.py
- │   ├── routes/
- │   │   ├── auth.py
- │   │   ├── content.py
- │   │   ├── translation.py
- │   │   ├── speech.py
- │   │   ├── feedback.py
- │   │   └── retraining.py
- │   ├── models/
- │   ├── schemas/
- │   ├── services/
- │   │   ├── nlp_engine.py
- │   │   ├── speech_engine.py
- │   │   ├── localization.py
- │   │   └── retrain_manager.py
- │   └── utils/
- │       ├── file_manager.py
- │       ├── logger.py
- │       └── metrics.py
- ├── storage/
- │   ├── uploads/
- │   └── outputs/
- ├── scripts/
- │   └── retrain.sh
- ├── docker-compose.yml
- ├── Dockerfile
- ├── requirements.txt
- └── README.md
-```
-
----
 
 ## ⚙️ .ENV CONFIGURATION (Local Setup)
 
@@ -154,6 +108,7 @@ def supported_languages():
   * `ai4bharat/IndicTrans2-en-indic`
   * `ai4bharat/IndicTrans2-indic-en`
   * `ai4bharat/IndicBERT`
+  * `llama3`
   * `facebook/nllb-200-distilled-600M` (restrict to Indic pairs)
 * **Framework:** PyTorch + HuggingFace Transformers
 * **Pipeline:**

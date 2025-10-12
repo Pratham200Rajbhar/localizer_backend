@@ -4,15 +4,16 @@ Speech (STT/TTS) routes
 import os
 import tempfile
 from pathlib import Path
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status, Form
 from fastapi.responses import FileResponse
+from typing import Optional
 from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.security import get_current_user
 from app.core.config import SUPPORTED_LANGUAGES, get_settings
 from app.models.user import User
 from app.schemas.speech import STTRequest, TTSRequest, STTResponse, TTSResponse
-from app.services.speech_engine import speech_engine
+from app.services import speech_engine
 from app.utils.file_manager import file_manager
 from app.utils.logger import app_logger
 
@@ -27,7 +28,7 @@ MAX_AUDIO_SIZE = 100 * 1024 * 1024  # 100 MB
 @router.post("/stt", response_model=STTResponse)
 async def speech_to_text(
     file: UploadFile = File(...),
-    language: str = None,
+    language: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -130,9 +131,9 @@ async def text_to_speech(
         )
     
     try:
-        # Create unique output filename
+        # Create unique output filename as MP3
         import uuid
-        output_filename = f"tts_{request.language}_{uuid.uuid4().hex[:8]}.wav"
+        output_filename = f"tts_{request.language}_{uuid.uuid4().hex[:8]}.mp3"
         output_path = os.path.join(settings.OUTPUT_DIR, output_filename)
         
         # Ensure output directory exists
