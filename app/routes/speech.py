@@ -66,7 +66,15 @@ async def speech_to_text(
             temp_file.write(content)
             temp_audio_path = temp_file.name
         
-        app_logger.info(f"Processing STT for file: {file.filename}")
+        app_logger.info(f"Processing STT for file: {file.filename} ({len(content)} bytes)")
+        
+        # Validate audio file quality
+        validation = speech_engine.validate_audio_file(temp_audio_path)
+        if not validation.get("is_valid", True):
+            if validation.get("is_silent", False):
+                raise ValueError("Audio file appears to contain only silence or very low audio")
+            if validation.get("sample_rate", 0) < 8000:
+                raise ValueError("Audio sample rate too low (minimum 8kHz required)")
         
         # Perform STT directly
         result = speech_engine.speech_to_text(

@@ -27,7 +27,7 @@ async def get_supported_languages():
     """
     Get list of supported languages (22 Indian languages)
     """
-    return {"languages": SUPPORTED_LANGUAGES}
+    return SUPPORTED_LANGUAGES
 
 
 @router.post("/detect-language", response_model=LanguageDetectionResponse)
