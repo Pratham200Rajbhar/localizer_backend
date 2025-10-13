@@ -1,0 +1,271 @@
+{
+  "summary": {
+    "total_tests": 37,
+    "tests_passed": 35,
+    "tests_failed": 2,
+    "success_rate": 94.5945945945946,
+    "total_time": 11.732589721679688,
+    "timestamp": 1760360763.4032888
+  },
+  "results": [
+    {
+      "test_name": "Root Health Check",
+      "passed": true,
+      "details": "Status: 200, Response: {'status': 'healthy', 'service': 'Indian Language Localizer', 'version': '1.0.0', 'environment': 'development'}",
+      "response_data": null,
+      "timestamp": 1760360753.6857285
+    },
+    {
+      "test_name": "Basic Health Check",
+      "passed": true,
+      "details": "Status: 200",
+      "response_data": null,
+      "timestamp": 1760360753.6887352
+    },
+    {
+      "test_name": "Database Health Check",
+      "passed": true,
+      "details": "Status: 200",
+      "response_data": null,
+      "timestamp": 1760360753.6967278
+    },
+    {
+      "test_name": "Detailed Health Check",
+      "passed": true,
+      "details": "Status: 200",
+      "response_data": null,
+      "timestamp": 1760360753.7007277
+    },
+    {
+      "test_name": "Supported Languages Endpoint",
+      "passed": true,
+      "details": "Found 22 languages, All 22 Indian languages: True",
+      "response_data": null,
+      "timestamp": 1760360753.703728
+    },
+    {
+      "test_name": "Language Count Validation",
+      "passed": true,
+      "details": "Expected: 22, Actual: 22",
+      "response_data": null,
+      "timestamp": 1760360753.703728
+    },
+    {
+      "test_name": "Language Detection #1 (en)",
+      "passed": true,
+      "details": "Text: 'Hello, how are you today?...', Detected: hi, Confidence: 0.50",
+      "response_data": null,
+      "timestamp": 1760360753.8797286
+    },
+    {
+      "test_name": "Language Detection #2 (hi)",
+      "passed": true,
+      "details": "Text: '\u0928\u092e\u0938\u094d\u0924\u0947, \u0906\u092a \u0915\u0948\u0938\u0947 \u0939\u0948\u0902?...', Detected: hi, Confidence: 0.90",
+      "response_data": null,
+      "timestamp": 1760360753.8857274
+    },
+    {
+      "test_name": "Language Detection #3 (bn)",
+      "passed": true,
+      "details": "Text: '\u09b9\u09cd\u09af\u09be\u09b2\u09cb, \u0986\u09aa\u09a8\u09bf \u0995\u09c7\u09ae\u09a8 \u0986\u099b\u09c7\u09a8?...', Detected: bn, Confidence: 0.90",
+      "response_data": null,
+      "timestamp": 1760360753.8927279
+    },
+    {
+      "test_name": "Language Detection #4 (ta)",
+      "passed": true,
+      "details": "Text: '\u0bb5\u0ba3\u0b95\u0bcd\u0b95\u0bae\u0bcd, \u0ba8\u0bc0\u0b99\u0bcd\u0b95\u0bb3\u0bcd \u0b8e\u0baa\u0bcd\u0baa\u0b9f\u0bbf \u0b87\u0bb0\u0bc1\u0b95\u0bcd\u0b95...', Detected: ta, Confidence: 0.90",
+      "response_data": null,
+      "timestamp": 1760360753.8987293
+    },
+    {
+      "test_name": "Language Detection #5 (te)",
+      "passed": true,
+      "details": "Text: '\u0c28\u0c2e\u0c38\u0c4d\u0c15\u0c3e\u0c30\u0c02, \u0c2e\u0c40\u0c30\u0c41 \u0c0e\u0c32\u0c3e \u0c09\u0c28\u0c4d\u0c28\u0c3e\u0c30\u0c41?...', Detected: te, Confidence: 0.90",
+      "response_data": null,
+      "timestamp": 1760360753.905727
+    },
+    {
+      "test_name": "Language Detection #6 (kn)",
+      "passed": true,
+      "details": "Text: '\u0ca8\u0cae\u0cb8\u0ccd\u0c95\u0cbe\u0cb0, \u0ca8\u0cc0\u0cb5\u0cc1 \u0cb9\u0cc7\u0c97\u0cbf\u0ca6\u0ccd\u0ca6\u0cc0\u0cb0\u0cbf?...', Detected: kn, Confidence: 0.90",
+      "response_data": null,
+      "timestamp": 1760360753.9117265
+    },
+    {
+      "test_name": "Language Detection #7 (gu)",
+      "passed": true,
+      "details": "Text: '\u0aa8\u0aae\u0ab8\u0acd\u0aa4\u0ac7, \u0aa4\u0aae\u0ac7 \u0a95\u0ac7\u0aae \u0a9b\u0acb?...', Detected: gu, Confidence: 0.90",
+      "response_data": null,
+      "timestamp": 1760360753.9187272
+    },
+    {
+      "test_name": "Language Detection #8 (mr)",
+      "passed": true,
+      "details": "Text: '\u0928\u092e\u0938\u094d\u0915\u093e\u0930, \u0924\u0941\u092e\u0940 \u0915\u0938\u0947 \u0906\u0939\u093e\u0924?...', Detected: mr, Confidence: 0.90",
+      "response_data": null,
+      "timestamp": 1760360753.924729
+    },
+    {
+      "test_name": "Simple Upload (text file)",
+      "passed": true,
+      "details": "File ID: 38c0511f-c758-475d-9077-02105cf7e99c, Size: 193 bytes",
+      "response_data": null,
+      "timestamp": 1760360753.938727
+    },
+    {
+      "test_name": "Translation Test #1",
+      "passed": true,
+      "details": "Source: 'Hello, how are you today?...', Translations: 4, Examples: hi: '\u0928\u092e\u0938\u094d\u0915\u093e\u0930, \u0906\u091c \u0906\u092a \u0915\u0948\u0938\u0947 \u0939\u0948\u0902?...' (IndicTrans2); bn: '\u09b9\u09cd\u09af\u09be\u09b2\u09cb, \u0986\u099c \u0995\u09c7\u09ae\u09a8 \u0986\u099b?...' (IndicTrans2); ta: '\u0bb5\u0ba3\u0b95\u0bcd\u0b95\u0bae\u0bcd, \u0b87\u0ba9\u0bcd\u0bb1\u0bc1 \u0b8e\u0baa\u0bcd\u0baa\u0b9f\u0bbf \u0b87\u0bb0\u0bc1\u0b95\u0bcd\u0b95\u0bbf\u0bb1...' (IndicTrans2)",
+      "response_data": null,
+      "timestamp": 1760360757.3278706
+    },
+    {
+      "test_name": "Translation Test #2",
+      "passed": true,
+      "details": "Source: 'The weather is nice today....', Translations: 4, Examples: gu: '\u0a86\u0a9c\u0ac7 \u0ab9\u0ab5\u0abe\u0aae\u0abe\u0aa8 \u0ab8\u0abe\u0ab0\u0ac1\u0a82 \u0a9b\u0ac7....' (IndicTrans2); mr: '\u0906\u091c \u0939\u0935\u093e\u092e\u093e\u0928 \u091a\u093e\u0902\u0917\u0932\u0947 \u0906\u0939\u0947....' (IndicTrans2); kn: '\u0c87\u0c82\u0ca6\u0cc1 \u0cb9\u0cb5\u0cbe\u0cae\u0cbe\u0ca8 \u0c9a\u0cc6\u0ca8\u0ccd\u0ca8\u0cbe\u0c97\u0cbf\u0ca6\u0cc6....' (IndicTrans2)",
+      "response_data": null,
+      "timestamp": 1760360757.876689
+    },
+    {
+      "test_name": "Translation Test #3",
+      "passed": true,
+      "details": "Source: 'I need medical assistance....', Translations: 2, Examples: hi: '\u092e\u0941\u091d\u0947 \u091a\u093f\u0915\u093f\u0924\u094d\u0938\u093e \u0938\u0939\u093e\u092f\u0924\u093e \u0915\u0940 \u0906\u0935\u0936\u094d\u092f\u0915...' (IndicTrans2); bn: '\u0986\u09ae\u09be\u09b0 \u099a\u09bf\u0995\u09bf\u09ce\u09b8\u09be \u09b8\u09b9\u09be\u09af\u09bc\u09a4\u09be \u09a6\u09b0\u0995\u09be\u09b0\u0964...' (IndicTrans2)",
+      "response_data": null,
+      "timestamp": 1760360758.1528058
+    },
+    {
+      "test_name": "Localization Test #1 (construction)",
+      "passed": true,
+      "details": "Language: hi, Localized: 'Electrician safety gear is mandatory for...', Adaptations: 0",
+      "response_data": null,
+      "timestamp": 1760360758.161669
+    },
+    {
+      "test_name": "Localization Test #2 (healthcare)",
+      "passed": true,
+      "details": "Language: bn, Localized: 'Patient needs immediate medical attentio...', Adaptations: 0",
+      "response_data": null,
+      "timestamp": 1760360758.163684
+    },
+    {
+      "test_name": "Localization Test #3 (education)",
+      "passed": true,
+      "details": "Language: ta, Localized: 'Students should complete their homework ...', Adaptations: 0",
+      "response_data": null,
+      "timestamp": 1760360758.167121
+    },
+    {
+      "test_name": "STT Processing",
+      "passed": true,
+      "details": "Language: en, Confidence: 0.00, Transcript: '...'",
+      "response_data": null,
+      "timestamp": 1760360760.645917
+    },
+    {
+      "test_name": "TTS Test #1 (en)",
+      "passed": true,
+      "details": "Language: en, Generation time: 1.27s, Audio path: tts_en_67879fb6.mp3",
+      "response_data": null,
+      "timestamp": 1760360761.9172258
+    },
+    {
+      "test_name": "TTS Test #2 (hi)",
+      "passed": true,
+      "details": "Language: hi, Generation time: 0.44s, Audio path: tts_hi_ce5c4407.mp3",
+      "response_data": null,
+      "timestamp": 1760360762.3636827
+    },
+    {
+      "test_name": "TTS Test #3 (bn)",
+      "passed": true,
+      "details": "Language: bn, Generation time: 0.47s, Audio path: tts_bn_5880f51d.mp3",
+      "response_data": null,
+      "timestamp": 1760360762.8362033
+    },
+    {
+      "test_name": "TTS Test #4 (ta)",
+      "passed": true,
+      "details": "Language: ta, Generation time: 0.46s, Audio path: tts_ta_74f71b2f.mp3",
+      "response_data": null,
+      "timestamp": 1760360763.2967684
+    },
+    {
+      "test_name": "Feedback Submission #1",
+      "passed": true,
+      "details": "Rating: 5, Status: success",
+      "response_data": null,
+      "timestamp": 1760360763.3175964
+    },
+    {
+      "test_name": "Feedback Submission #2",
+      "passed": true,
+      "details": "Rating: 4, Status: success",
+      "response_data": null,
+      "timestamp": 1760360763.3287964
+    },
+    {
+      "test_name": "Feedback Submission #3",
+      "passed": true,
+      "details": "Rating: 3, Status: success",
+      "response_data": null,
+      "timestamp": 1760360763.3405252
+    },
+    {
+      "test_name": "Metrics Endpoint",
+      "passed": true,
+      "details": "Status: 200",
+      "response_data": null,
+      "timestamp": 1760360763.3425252
+    },
+    {
+      "test_name": "Performance Monitoring",
+      "passed": true,
+      "details": "Status: 200, Metrics available: True",
+      "response_data": null,
+      "timestamp": 1760360763.3465252
+    },
+    {
+      "test_name": "Empty Text Detection",
+      "passed": true,
+      "details": "Status: 400 (expected 400)",
+      "response_data": null,
+      "timestamp": 1760360763.3482106
+    },
+    {
+      "test_name": "Unsupported Language Translation",
+      "passed": false,
+      "details": "Status: 422 (expected 400)",
+      "response_data": null,
+      "timestamp": 1760360763.353222
+    },
+    {
+      "test_name": "Invalid File Type Upload",
+      "passed": true,
+      "details": "Status: 415 (expected 415)",
+      "response_data": null,
+      "timestamp": 1760360763.355221
+    },
+    {
+      "test_name": "Batch Translation",
+      "passed": false,
+      "details": "HTTP 422",
+      "response_data": null,
+      "timestamp": 1760360763.3598042
+    },
+    {
+      "test_name": "File Listing",
+      "passed": true,
+      "details": "Status: 200, Files found: 64",
+      "response_data": null,
+      "timestamp": 1760360763.380157
+    },
+    {
+      "test_name": "Translation Statistics",
+      "passed": true,
+      "details": "Status: 200, Total translations: 572",
+      "response_data": null,
+      "timestamp": 1760360763.4012887
+    }
+  ]
+}

@@ -77,13 +77,36 @@ MODEL_CONFIG = {
     }
 }
 
-# Language code mapping for NLLB (Facebook's model)
+# COMPREHENSIVE Language code mapping for NLLB (Facebook's model) - ALL 22 Indian Languages + English
 NLLB_LANG_CODES = {
-    "as": "asm_Beng", "bn": "ben_Beng", "gu": "guj_Gujr",
-    "hi": "hin_Deva", "kn": "kan_Knda", "ml": "mal_Mlym",
-    "mr": "mar_Deva", "ne": "npi_Deva", "or": "ory_Orya",
-    "pa": "pan_Guru", "ta": "tam_Taml", "te": "tel_Telu",
-    "ur": "urd_Arab", "sa": "san_Deva"
+    # Core Indian languages (IndicTrans2 supported)
+    "as": "asm_Beng",      # Assamese  
+    "bn": "ben_Beng",      # Bengali
+    "gu": "guj_Gujr",      # Gujarati
+    "hi": "hin_Deva",      # Hindi
+    "kn": "kan_Knda",      # Kannada  
+    "ml": "mal_Mlym",      # Malayalam
+    "mr": "mar_Deva",      # Marathi
+    "ne": "npi_Deva",      # Nepali
+    "or": "ory_Orya",      # Odia
+    "pa": "pan_Guru",      # Punjabi
+    "ta": "tam_Taml",      # Tamil
+    "te": "tel_Telu",      # Telugu
+    "ur": "urd_Arab",      # Urdu
+    "sa": "san_Deva",      # Sanskrit
+    
+    # Additional Indian languages (NLLB fallback mappings)
+    "brx": "hin_Deva",     # Bodo → Hindi fallback
+    "doi": "hin_Deva",     # Dogri → Hindi fallback  
+    "ks": "urd_Arab",      # Kashmiri → Urdu fallback
+    "kok": "mar_Deva",     # Konkani → Marathi fallback
+    "mai": "hin_Deva",     # Maithili → Hindi fallback
+    "mni": "ben_Beng",     # Manipuri → Bengali fallback
+    "sat": "hin_Deva",     # Santali → Hindi fallback
+    "sd": "urd_Arab",      # Sindhi → Urdu fallback
+    
+    # English
+    "en": "eng_Latn"       # English
 }
 
 
@@ -350,20 +373,27 @@ class AdvancedNLPEngine:
         target_lang: str
     ) -> Dict[str, Any]:
         """
-        Translate using IndicTrans2 models - FIXED VERSION
+        Translate using IndicTrans2 models - ROBUST VERSION
+        Handles: English ↔ Indian languages ONLY
         """
         start_time = time.time()
         
-        # Determine direction
-        if source_lang == "en" and target_lang in SUPPORTED_LANGUAGES:
+        # Check if this is a valid IndicTrans2 translation pair
+        is_en_to_indic = (source_lang == "en" and target_lang in SUPPORTED_LANGUAGES)
+        is_indic_to_en = (source_lang in SUPPORTED_LANGUAGES and target_lang == "en")
+        
+        if not (is_en_to_indic or is_indic_to_en):
+            # This is not a valid IndicTrans2 pair - return None to let robust logic handle it
+            app_logger.info(f"IndicTrans2 cannot handle {source_lang}->{target_lang}, returning None for robust handling")
+            return None
+        
+        # Determine direction and model key
+        if is_en_to_indic:
             direction = "en_to_indic"
             model_key = "indic_trans2_en_to_indic"
-        elif source_lang in SUPPORTED_LANGUAGES and target_lang == "en":
+        else:  # is_indic_to_en
             direction = "indic_to_en"  
             model_key = "indic_trans2_indic_to_en"
-        else:
-            # Use NLLB for indic-to-indic translation
-            return self.translate_with_nllb(text, source_lang, target_lang)
         
         # Load model if needed
         if not self.load_indic_trans2_model(direction):
@@ -537,11 +567,13 @@ class AdvancedNLPEngine:
             if not cleaned_text:
                 return self._emergency_translate(text, source_lang, target_lang)
             
-            # Map language codes to NLLB format
+            # Map language codes to NLLB format with validation
             src_code = NLLB_LANG_CODES.get(source_lang, "eng_Latn")
             tgt_code = NLLB_LANG_CODES.get(target_lang, "hin_Deva")
             
-            # CRITICAL FIX: Handle different tokenizer types properly
+            app_logger.info(f"NLLB mapping: {source_lang}({src_code}) -> {target_lang}({tgt_code})")
+            
+            # CRITICAL FIX: Handle different tokenizer types and validate language codes
             lang_code_mapping = None
             forced_bos_token_id = None
             
@@ -552,44 +584,66 @@ class AdvancedNLPEngine:
             if has_lang_code_to_id and tokenizer.lang_code_to_id:
                 # Standard NLLB tokenizer
                 lang_code_mapping = tokenizer.lang_code_to_id
+                available_langs = list(lang_code_mapping.keys())
+                app_logger.info(f"Available NLLB languages: {len(available_langs)} languages loaded")
                 
-                # Validate and adjust language codes
+                # Validate and adjust source language code
                 if src_code not in lang_code_mapping:
-                    app_logger.warning(f"Source {src_code} not found, trying alternatives")
-                    # Try common alternatives
-                    alt_codes = ["eng_Latn", "hin_Deva"]
-                    for alt in alt_codes:
+                    app_logger.warning(f"Source {src_code} not found in NLLB model")
+                    # Try alternatives for source language
+                    src_alternatives = ["eng_Latn", "hin_Deva", "ben_Beng", "tam_Taml"]
+                    for alt in src_alternatives:
                         if alt in lang_code_mapping:
+                            app_logger.info(f"Using source alternative: {alt}")
                             src_code = alt
                             break
+                    else:
+                        app_logger.error(f"No valid source language found for {source_lang}")
+                        return self._emergency_translate(text, source_lang, target_lang)
                 
+                # Validate and adjust target language code  
                 if tgt_code not in lang_code_mapping:
-                    app_logger.warning(f"Target {tgt_code} not found, trying alternatives")
-                    alt_codes = ["hin_Deva", "eng_Latn"]
-                    for alt in alt_codes:
+                    app_logger.warning(f"Target {tgt_code} not found in NLLB model")
+                    # Try alternatives for target language
+                    tgt_alternatives = ["hin_Deva", "ben_Beng", "tam_Taml", "eng_Latn"]
+                    for alt in tgt_alternatives:
                         if alt in lang_code_mapping:
+                            app_logger.info(f"Using target alternative: {alt}")
                             tgt_code = alt
                             break
+                    else:
+                        app_logger.error(f"No valid target language found for {target_lang}")
+                        return self._emergency_translate(text, source_lang, target_lang)
                 
-                # Get forced BOS token
+                # Get forced BOS token for target language
                 forced_bos_token_id = lang_code_mapping.get(tgt_code)
+                app_logger.info(f"Using BOS token ID: {forced_bos_token_id} for {tgt_code}")
                 
             elif has_convert_tokens:
                 # Fast tokenizer approach
                 try:
                     # Try to get token IDs for language codes
-                    src_token = tokenizer.convert_tokens_to_ids(f"<{src_code}>")
-                    tgt_token = tokenizer.convert_tokens_to_ids(f"<{tgt_code}>")
+                    src_token = tokenizer.convert_tokens_to_ids(f"__{src_code}__")
+                    tgt_token = tokenizer.convert_tokens_to_ids(f"__{tgt_code}__") 
                     
-                    if tgt_token != tokenizer.unk_token_id:
+                    if tgt_token != getattr(tokenizer, 'unk_token_id', -1):
                         forced_bos_token_id = tgt_token
+                        app_logger.info(f"Fast tokenizer BOS: {forced_bos_token_id}")
                         
                 except Exception as tok_e:
-                    app_logger.warning(f"Token conversion failed: {tok_e}")
+                    app_logger.warning(f"Fast tokenizer conversion failed: {tok_e}")
+            else:
+                app_logger.warning("No suitable tokenizer method found, using basic approach")
             
             # Set source language if possible
             if hasattr(tokenizer, 'src_lang'):
                 tokenizer.src_lang = src_code
+                app_logger.info(f"Set tokenizer src_lang to: {src_code}")
+            
+            # Set target language if possible
+            if hasattr(tokenizer, 'tgt_lang'):
+                tokenizer.tgt_lang = tgt_code
+                app_logger.info(f"Set tokenizer tgt_lang to: {tgt_code}")
             
             # Tokenize input
             try:
@@ -611,18 +665,28 @@ class AdvancedNLPEngine:
             try:
                 with torch.no_grad():
                     generation_kwargs = {
-                        'max_length': 512,
-                        'num_beams': 4,
+                        'max_length': 256,
+                        'min_length': 5,
+                        'num_beams': 5,
                         'early_stopping': True,
                         'do_sample': False,
-                        'pad_token_id': getattr(tokenizer, 'pad_token_id', 0)
+                        'pad_token_id': getattr(tokenizer, 'pad_token_id', 0),
+                        'repetition_penalty': 1.1,
+                        'length_penalty': 1.0
                     }
                     
-                    # Add forced BOS token if available
+                    # CRITICAL: Add forced BOS token if available
                     if forced_bos_token_id is not None and forced_bos_token_id != getattr(tokenizer, 'unk_token_id', -1):
                         generation_kwargs['forced_bos_token_id'] = forced_bos_token_id
-                        app_logger.info(f"Using forced BOS token: {forced_bos_token_id} for {tgt_code}")
+                        app_logger.info(f"NLLB using forced BOS token: {forced_bos_token_id} for {tgt_code}")
+                    else:
+                        app_logger.warning(f"No valid BOS token found for {tgt_code}, translation may be incorrect")
                     
+                    # Add decoder_start_token_id as alternative
+                    if hasattr(model.config, 'decoder_start_token_id') and forced_bos_token_id:
+                        generation_kwargs['decoder_start_token_id'] = forced_bos_token_id
+                    
+                    app_logger.info(f"NLLB generation params: {generation_kwargs}")
                     outputs = model.generate(**inputs, **generation_kwargs)
                 
                 translated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -709,7 +773,13 @@ class AdvancedNLPEngine:
         use_llama_enhancement: bool = False
     ) -> Dict[str, Any]:
         """
-        Main translation method supporting all models
+        ROBUST Main translation method - handles ANY language to ANY language
+        
+        Translation Strategy:
+        1. English ↔ Indian languages → IndicTrans2 (primary)
+        2. Indian ↔ Indian languages → NLLB (primary) 
+        3. English ↔ English → Return original (no translation needed)
+        4. Fallback chain: IndicTrans2 → NLLB → Emergency Dictionary
         """
         if not TORCH_AVAILABLE:
             raise RuntimeError("PyTorch not available for translation")
@@ -717,40 +787,72 @@ class AdvancedNLPEngine:
         start_time = time.time()
         results = []
         
+        # Validate source language
+        if source_language not in SUPPORTED_LANGUAGES and source_language != "en":
+            app_logger.error(f"Unsupported source language: {source_language}")
+            raise ValueError(f"Source language '{source_language}' not supported")
+        
         for target_lang in target_languages:
-            if target_lang not in SUPPORTED_LANGUAGES:
+            # Validate target language
+            if target_lang not in SUPPORTED_LANGUAGES and target_lang != "en":
                 app_logger.warning(f"Unsupported target language: {target_lang}")
+                results.append(self._create_error_result(
+                    text, source_language, target_lang, 
+                    f"Target language '{target_lang}' not supported"
+                ))
+                continue
+                
+            # Skip translation if source and target are the same
+            if source_language == target_lang:
+                app_logger.info(f"Same language detected: {source_language} = {target_lang}, returning original")
+                results.append({
+                    "language": target_lang,
+                    "language_name": SUPPORTED_LANGUAGES.get(target_lang, "English"),
+                    "translated_text": text,
+                    "model_used": "no_translation_needed",
+                    "translation_time": 0.0,
+                    "source_language": source_language,
+                    "target_language": target_lang,
+                    "confidence_score": 1.0
+                })
                 continue
             
             try:
-                # Try IndicTrans2 first
-                translation_result = None
-                try:
-                    translation_result = self.translate_with_indic_trans2(
-                        text, source_language, target_lang
-                    )
-                except Exception as indic_error:
-                    app_logger.warning(f"IndicTrans2 failed for {target_lang}: {indic_error}")
+                app_logger.info(f"=== TRANSLATION REQUEST: {source_language} -> {target_lang} ===")
+                app_logger.info(f"Source text: '{text}'")
+                
+                translation_result = self._execute_robust_translation(
+                    text, source_language, target_lang, domain
+                )
+                
+                # Optional LLaMA 3 enhancement (only if translation was successful)
+                if (use_llama_enhancement and 
+                    translation_result.get("translated_text") != text and
+                    translation_result.get("model_used") not in ["fallback", "emergency", "error_fallback"]):
                     
-                    # Fallback to NLLB
                     try:
-                        app_logger.info(f"Falling back to NLLB for {source_language}->{target_lang}")
-                        translation_result = self.translate_with_nllb(
-                            text, source_language, target_lang
+                        enhanced = self.enhance_with_llama3(
+                            translation_result["translated_text"],
+                            context=f"Domain: {domain}" if domain else "",
+                            task="improve"
                         )
-                    except Exception as nllb_error:
-                        app_logger.warning(f"NLLB also failed for {target_lang}: {nllb_error}")
-                        
-                        # Final fallback - return original text with metadata
-                        translation_result = {
-                            "translated_text": text,  # Return original text
-                            "model_used": "fallback",
-                            "translation_time": 0.1,
-                            "source_language": source_language,
-                            "target_language": target_lang,
-                            "confidence_score": 0.1,
-                            "fallback_reason": f"Both IndicTrans2 and NLLB failed"
-                        }
+                        translation_result["enhanced_text"] = enhanced["enhanced_text"]
+                        translation_result["llama_enhanced"] = True
+                    except Exception as llama_error:
+                        app_logger.warning(f"LLaMA enhancement failed: {llama_error}")
+                        translation_result["llama_enhanced"] = False
+                
+                results.append({
+                    "language": target_lang,
+                    "language_name": SUPPORTED_LANGUAGES.get(target_lang, "English"),
+                    **translation_result
+                })
+                
+            except Exception as e:
+                app_logger.error(f"All translation methods failed for {target_lang}: {e}")
+                results.append(self._create_error_result(
+                    text, source_language, target_lang, str(e)
+                ))
                 
                 # Optional LLaMA 3 enhancement (only if translation was successful)
                 if (use_llama_enhancement and 
@@ -792,15 +894,225 @@ class AdvancedNLPEngine:
         
         total_time = time.time() - start_time
         
+        total_time = time.time() - start_time
+        successful_translations = len([r for r in results if "error" not in r])
+        
         return {
             "source_text": text,
             "source_language": source_language,
             "target_languages": target_languages,
             "translations": results,
-            "total_translations": len([r for r in results if "error" not in r]),
+            "total_translations": successful_translations,
             "total_time": total_time,
-            "models_used": ["IndicTrans2", "NLLB-Indic"] + (["LLaMA-3"] if use_llama_enhancement else [])
+            "models_used": self._get_models_used(results) + (["LLaMA-3"] if use_llama_enhancement else [])
         }
+    
+    def _execute_robust_translation(
+        self, 
+        text: str, 
+        source_lang: str, 
+        target_lang: str,
+        domain: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Execute robust translation with intelligent model selection
+        
+        Translation Logic:
+        1. English ↔ Indian: Use IndicTrans2 first, then NLLB fallback
+        2. Indian ↔ Indian: Use NLLB first, then IndicTrans2 via English bridge
+        3. Emergency: Use dictionary-based translation
+        """
+        
+        # Determine optimal translation strategy
+        is_en_to_indic = (source_lang == "en" and target_lang in SUPPORTED_LANGUAGES)
+        is_indic_to_en = (source_lang in SUPPORTED_LANGUAGES and target_lang == "en") 
+        is_indic_to_indic = (source_lang in SUPPORTED_LANGUAGES and target_lang in SUPPORTED_LANGUAGES)
+        
+        translation_result = None
+        attempted_models = []
+        
+        try:
+            if is_en_to_indic or is_indic_to_en:
+                # Strategy 1: English ↔ Indian - IndicTrans2 first
+                app_logger.info(f"Using IndicTrans2 for {source_lang}->{target_lang}")
+                try:
+                    translation_result = self.translate_with_indic_trans2(text, source_lang, target_lang)
+                    
+                    # Check if IndicTrans2 can handle this pair
+                    if translation_result is None:
+                        app_logger.info(f"IndicTrans2 cannot handle {source_lang}->{target_lang}, skipping to other methods")
+                    elif (translation_result.get("translated_text") and
+                          translation_result.get("translated_text").strip() != text.strip() and
+                          translation_result.get("model_used") == "IndicTrans2"):
+                        attempted_models.append("IndicTrans2")
+                        return translation_result
+                    else:
+                        app_logger.warning("IndicTrans2 returned invalid result")
+                        attempted_models.append("IndicTrans2-Failed")
+                        
+                except Exception as indic_error:
+                    app_logger.warning(f"IndicTrans2 failed: {indic_error}")
+                    attempted_models.append("IndicTrans2-Error")
+                
+                # Fallback to NLLB for English ↔ Indian (only if IndicTrans2 was actually attempted)
+                if "IndicTrans2" in attempted_models or "IndicTrans2-Failed" in attempted_models:
+                    try:
+                        app_logger.info(f"IndicTrans2 fallback: Using NLLB for {source_lang}->{target_lang}")
+                        translation_result = self.translate_with_nllb(text, source_lang, target_lang)
+                        attempted_models.append("NLLB")
+                        
+                        if (translation_result and 
+                            translation_result.get("translated_text") and
+                            translation_result.get("translated_text").strip() != text.strip() and
+                            not self._is_invalid_translation(translation_result.get("translated_text"), target_lang)):
+                            return translation_result
+                            
+                    except Exception as nllb_error:
+                        app_logger.warning(f"NLLB fallback failed: {nllb_error}")
+                    
+            elif is_indic_to_indic:
+                # Strategy 2: Indian ↔ Indian - Use English Bridge FIRST (more reliable)
+                app_logger.info(f"Using English bridge for cross-Indic translation {source_lang}->{target_lang}")
+                
+                try:
+                    # Step 1: Source Indian → English
+                    app_logger.info(f"Bridge Step 1: {source_lang} -> en")
+                    bridge_result_1 = self.translate_with_indic_trans2(text, source_lang, "en")
+                    
+                    if (bridge_result_1 and 
+                        bridge_result_1.get("translated_text") and 
+                        bridge_result_1.get("translated_text").strip() and
+                        bridge_result_1.get("model_used") == "IndicTrans2"):
+                        
+                        english_text = bridge_result_1["translated_text"].strip()
+                        app_logger.info(f"Bridge intermediate: '{text}' -> '{english_text}'")
+                        
+                        # Step 2: English → Target Indian  
+                        app_logger.info(f"Bridge Step 2: en -> {target_lang}")
+                        bridge_result_2 = self.translate_with_indic_trans2(english_text, "en", target_lang)
+                        
+                        if (bridge_result_2 and 
+                            bridge_result_2.get("translated_text") and
+                            bridge_result_2.get("translated_text").strip() and
+                            bridge_result_2.get("model_used") == "IndicTrans2"):
+                            
+                            final_translation = bridge_result_2["translated_text"].strip()
+                            app_logger.info(f"Bridge final: '{english_text}' -> '{final_translation}'")
+                            
+                            attempted_models.extend(["IndicTrans2-Bridge"])
+                            return {
+                                "translated_text": final_translation,
+                                "model_used": "IndicTrans2-Bridge",
+                                "translation_time": bridge_result_1.get("translation_time", 0) + bridge_result_2.get("translation_time", 0),
+                                "source_language": source_lang,
+                                "target_language": target_lang,
+                                "confidence_score": min(
+                                    bridge_result_1.get("confidence_score", 0.8),
+                                    bridge_result_2.get("confidence_score", 0.8)
+                                ),
+                                "bridge_translation": True,
+                                "intermediate_language": "en",
+                                "intermediate_text": english_text
+                            }
+                        else:
+                            app_logger.warning(f"Bridge Step 2 failed: {bridge_result_2}")
+                    else:
+                        app_logger.warning(f"Bridge Step 1 failed: {bridge_result_1}")
+                        
+                except Exception as bridge_error:
+                    app_logger.warning(f"English bridge translation failed: {bridge_error}")
+                
+                # Strategy 2b: Skip NLLB for now due to language code issues
+                # The NLLB model is producing incorrect language outputs
+                app_logger.info(f"Skipping NLLB for cross-Indic translation due to known issues")
+                attempted_models.append("NLLB-Skipped")
+            
+        except Exception as e:
+            app_logger.error(f"All primary translation methods failed: {e}")
+        
+        # Final fallback - Emergency dictionary translation
+        app_logger.info(f"Using emergency translation for {source_lang}->{target_lang}")
+        attempted_models.append("Emergency")
+        emergency_result = self._emergency_translate(text, source_lang, target_lang)
+        emergency_result["attempted_models"] = attempted_models
+        return emergency_result
+    
+    def _create_error_result(
+        self, 
+        text: str, 
+        source_lang: str, 
+        target_lang: str, 
+        error_message: str
+    ) -> Dict[str, Any]:
+        """Create standardized error result"""
+        return {
+            "language": target_lang,
+            "language_name": SUPPORTED_LANGUAGES.get(target_lang, "Unknown"),
+            "translated_text": text,  # Return original as fallback
+            "model_used": "error_fallback", 
+            "translation_time": 0.0,
+            "source_language": source_lang,
+            "target_language": target_lang,
+            "confidence_score": 0.0,
+            "error": error_message
+        }
+    
+    def _get_models_used(self, results: List[Dict]) -> List[str]:
+        """Extract unique models used from translation results"""
+        models = set()
+        for result in results:
+            model_used = result.get("model_used", "unknown")
+            if model_used and model_used != "error_fallback":
+                models.add(model_used)
+        return list(models)
+    
+    def _is_invalid_translation(self, translated_text: str, target_lang: str) -> bool:
+        """Check if translation result is invalid (wrong language, etc.)"""
+        if not translated_text or not translated_text.strip():
+            return True
+        
+        # Check for common invalid patterns
+        invalid_patterns = [
+            "Eguraldi ona dago",  # Basque language (common NLLB error)
+            "Il fait beau",       # French 
+            "Es ist schön",       # German
+            "Hace buen tiempo",   # Spanish
+            "È una bella giornata" # Italian
+        ]
+        
+        text_lower = translated_text.lower()
+        for pattern in invalid_patterns:
+            if pattern.lower() in text_lower:
+                app_logger.warning(f"Invalid translation detected: {pattern} in output")
+                return True
+        
+        # Check if text contains proper target language script
+        if target_lang in ["hi", "mr", "ne", "sa"]:  # Devanagari script
+            if not any(ord(char) >= 0x0900 and ord(char) <= 0x097F for char in translated_text):
+                app_logger.warning(f"No Devanagari script found for {target_lang}")
+                return True
+        elif target_lang == "bn":  # Bengali script
+            if not any(ord(char) >= 0x0980 and ord(char) <= 0x09FF for char in translated_text):
+                app_logger.warning(f"No Bengali script found for {target_lang}")
+                return True
+        elif target_lang == "ta":  # Tamil script
+            if not any(ord(char) >= 0x0B80 and ord(char) <= 0x0BFF for char in translated_text):
+                app_logger.warning(f"No Tamil script found for {target_lang}")
+                return True
+        elif target_lang == "te":  # Telugu script
+            if not any(ord(char) >= 0x0C00 and ord(char) <= 0x0C7F for char in translated_text):
+                app_logger.warning(f"No Telugu script found for {target_lang}")
+                return True
+        elif target_lang == "gu":  # Gujarati script
+            if not any(ord(char) >= 0x0A80 and ord(char) <= 0x0AFF for char in translated_text):
+                app_logger.warning(f"No Gujarati script found for {target_lang}")
+                return True
+        elif target_lang == "pa":  # Gurmukhi script
+            if not any(ord(char) >= 0x0A00 and ord(char) <= 0x0A7F for char in translated_text):
+                app_logger.warning(f"No Gurmukhi script found for {target_lang}")
+                return True
+        
+        return False
 
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about loaded models"""
