@@ -161,12 +161,10 @@ async def run_retraining_job(
             await asyncio.sleep(2)  # Simulate work
         
         # Run actual retraining
-        result = await retrain_manager.retrain_model(
+        result = retrain_manager.trigger_retraining(
             domain=domain,
-            model_type=model_type,
             epochs=epochs,
-            batch_size=batch_size,
-            learning_rate=learning_rate
+            languages=None  # Will use default supported languages
         )
         
         # Update completion status

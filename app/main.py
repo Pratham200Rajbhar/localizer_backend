@@ -348,6 +348,12 @@ app.include_router(feedback.router)
 from app.routes import jobs
 app.include_router(jobs.router)
 
+# Add new functionality routers
+from app.routes import video, assessment, integration
+app.include_router(video.router)
+app.include_router(assessment.router)
+app.include_router(integration.router)
+
 
 if __name__ == "__main__":
     import uvicorn

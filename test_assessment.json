@@ -1,0 +1,18 @@
+{
+  "assessment_title": "Basic English Test",
+  "questions": [
+    {
+      "id": 1,
+      "question": "What is your name?",
+      "type": "text",
+      "answer": "Sample answer"
+    },
+    {
+      "id": 2,
+      "question": "How are you today?",
+      "type": "multiple_choice",
+      "options": ["Good", "Bad", "Okay"],
+      "correct_answer": "Good"
+    }
+  ]
+}

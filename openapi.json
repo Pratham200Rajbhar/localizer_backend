@@ -1,0 +1,1396 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Indian Language Localizer API",
+    "version": "1.0.0",
+    "description": "Comprehensive AI-powered multilingual translation and localization backend for 22 Indian languages using IndicTrans2, LLaMA 3, and Whisper Large V3",
+    "contact": {
+      "name": "API Support",
+      "email": "support@indianlocalizer.ai"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Development server"
+    },
+    {
+      "url": "https://api.indianlocalizer.ai",
+      "description": "Production server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Translation",
+      "description": "Text translation and language detection"
+    },
+    {
+      "name": "Speech",
+      "description": "Speech-to-Text (STT) and Text-to-Speech (TTS) processing"
+    },
+    {
+      "name": "Video Localization",
+      "description": "Video processing with subtitles and audio localization"
+    },
+    {
+      "name": "Assessment Translation",
+      "description": "Educational assessment file translation (JSON/CSV)"
+    },
+    {
+      "name": "LMS Integration",
+      "description": "Integration APIs for NCVET/MSDE/Skill India Digital systems"
+    },
+    {
+      "name": "Content",
+      "description": "File upload and content management"
+    },
+    {
+      "name": "Evaluation",
+      "description": "Translation quality evaluation (BLEU/COMET scores)"
+    },
+    {
+      "name": "Feedback",
+      "description": "User feedback and rating collection"
+    }
+  ],
+  "paths": {
+    "/supported-languages": {
+      "get": {
+        "tags": ["Translation"],
+        "summary": "Get supported languages",
+        "description": "Returns comprehensive list of all 22 supported Indian languages and engine status",
+        "responses": {
+          "200": {
+            "description": "Supported languages retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportedLanguagesResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to fetch supported languages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/detect-language": {
+      "post": {
+        "tags": ["Translation"],
+        "summary": "Auto-detect language",
+        "description": "Automatically detect the language of input text with confidence score",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LanguageDetectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Language detected successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LanguageDetectionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Text is required and cannot be empty",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Language detection error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/translate": {
+      "post": {
+        "tags": ["Translation"],
+        "summary": "Translate content",
+        "description": "Translate text content with cultural localization using IndicTrans2 and LLaMA 3",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranslationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Translation completed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchTranslationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters or unsupported language",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Translation engine failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/speech/stt": {
+      "post": {
+        "tags": ["Speech"],
+        "summary": "Speech to Text (STT)",
+        "description": "Convert speech audio to text using Whisper Large V3",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Audio file (WAV, MP3, MP4, M4A, OGG, FLAC)"
+                  },
+                  "language": {
+                    "type": "string",
+                    "description": "Optional language hint for better accuracy",
+                    "example": "hi"
+                  }
+                },
+                "required": ["file"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Speech-to-text conversion successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/STTResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid language or request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "File too large (max 100 MB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported audio format",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/speech/tts": {
+      "post": {
+        "tags": ["Speech"],
+        "summary": "Text to Speech (TTS)",
+        "description": "Convert text to speech audio using VITS/Tacotron2",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TTSRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Audio file generated successfully",
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid language or text parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "TTS generation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/speech/localize": {
+      "post": {
+        "tags": ["Speech"],
+        "summary": "Audio localization pipeline",
+        "description": "Complete audio localization: STT → Translation → TTS",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Audio file to localize"
+                  },
+                  "target_language": {
+                    "type": "string",
+                    "description": "Target language code",
+                    "example": "hi"
+                  },
+                  "domain": {
+                    "type": "string",
+                    "description": "Domain for localization context",
+                    "example": "healthcare",
+                    "default": "general"
+                  }
+                },
+                "required": ["file", "target_language"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Audio localization completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioLocalizationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters or unsupported language",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/video/localize": {
+      "post": {
+        "tags": ["Video Localization"],
+        "summary": "Video localization",
+        "description": "Complete video localization with subtitle generation and optional dubbed audio",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Video file (MP4, AVI, MOV, MKV, WEBM)"
+                  },
+                  "target_language": {
+                    "type": "string",
+                    "description": "Target language code",
+                    "example": "hi"
+                  },
+                  "domain": {
+                    "type": "string",
+                    "description": "Content domain",
+                    "example": "construction",
+                    "default": "general"
+                  },
+                  "include_subtitles": {
+                    "type": "boolean",
+                    "description": "Generate subtitle file",
+                    "default": true
+                  },
+                  "include_dubbed_audio": {
+                    "type": "boolean",
+                    "description": "Generate dubbed audio track",
+                    "default": false
+                  }
+                },
+                "required": ["file", "target_language"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Video localization completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoLocalizationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters or unsupported language",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "File too large (max 500 MB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported video format",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assessment/translate": {
+      "post": {
+        "tags": ["Assessment Translation"],
+        "summary": "Translate assessment files",
+        "description": "Translate educational assessment files (JSON/CSV) with educational terminology preservation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Assessment file (JSON or CSV)"
+                  },
+                  "target_language": {
+                    "type": "string",
+                    "description": "Target language code",
+                    "example": "hi"
+                  },
+                  "domain": {
+                    "type": "string",
+                    "description": "Educational domain",
+                    "example": "education",
+                    "default": "education"
+                  }
+                },
+                "required": ["file", "target_language"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Assessment translation completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssessmentTranslationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters or unsupported language",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "File too large (max 50 MB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported assessment format",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/integration/upload": {
+      "post": {
+        "tags": ["LMS Integration"],
+        "summary": "LMS content upload",
+        "description": "Upload content for automatic localization (NCVET/MSDE/Skill India Digital integration)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Content file to localize"
+                  },
+                  "target_languages": {
+                    "type": "string",
+                    "description": "Comma-separated language codes",
+                    "example": "hi,ta,bn"
+                  },
+                  "content_type": {
+                    "type": "string",
+                    "enum": ["assessment", "document", "audio", "video"],
+                    "description": "Type of content being uploaded"
+                  },
+                  "domain": {
+                    "type": "string",
+                    "description": "Content domain",
+                    "example": "skill_development",
+                    "default": "general"
+                  },
+                  "partner_id": {
+                    "type": "string",
+                    "description": "LMS/NCVET partner identifier",
+                    "example": "NCVET_001"
+                  },
+                  "priority": {
+                    "type": "string",
+                    "enum": ["low", "normal", "high"],
+                    "description": "Processing priority",
+                    "default": "normal"
+                  }
+                },
+                "required": ["file", "target_languages", "content_type"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Content uploaded and queued for processing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationUploadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters or unsupported content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported file format for content type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/integration/status/{job_id}": {
+      "get": {
+        "tags": ["LMS Integration"],
+        "summary": "Check job status",
+        "description": "Get processing status of integration job",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Integration job ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationStatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/upload": {
+      "post": {
+        "tags": ["Content"],
+        "summary": "Simple file upload",
+        "description": "Upload file to storage with automatic ID generation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "File to upload (TXT, PDF, MP3, MP4)"
+                  }
+                },
+                "required": ["file"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "File uploaded successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimpleUploadResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "File too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported file type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feedback": {
+      "post": {
+        "tags": ["Feedback"],
+        "summary": "Submit feedback",
+        "description": "Submit user feedback and ratings for service quality",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Feedback submitted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid rating or parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/evaluate/run": {
+      "post": {
+        "tags": ["Evaluation"],
+        "summary": "Run translation evaluation",
+        "description": "Compute BLEU and COMET scores for translation quality evaluation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Evaluation completed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Translation not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SupportedLanguagesResponse": {
+        "type": "object",
+        "properties": {
+          "supported_languages": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "hi": "Hindi",
+              "ta": "Tamil",
+              "bn": "Bengali"
+            }
+          },
+          "total_count": {
+            "type": "integer",
+            "example": 22
+          },
+          "language_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": ["hi", "ta", "bn", "gu"]
+          },
+          "english_supported": {
+            "type": "boolean",
+            "example": true
+          },
+          "engine_status": {
+            "type": "object",
+            "properties": {
+              "model_name": {
+                "type": "string",
+                "example": "IndicTrans2"
+              },
+              "loaded": {
+                "type": "boolean",
+                "example": true
+              },
+              "version": {
+                "type": "string",
+                "example": "1.0"
+              }
+            }
+          }
+        }
+      },
+      "LanguageDetectionRequest": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to analyze for language detection",
+            "example": "नमस्ते, आप कैसे हैं?"
+          }
+        },
+        "required": ["text"]
+      },
+      "LanguageDetectionResponse": {
+        "type": "object",
+        "properties": {
+          "detected_language": {
+            "type": "string",
+            "example": "hi"
+          },
+          "language_name": {
+            "type": "string",
+            "example": "Hindi"
+          },
+          "confidence": {
+            "type": "number",
+            "format": "float",
+            "example": 0.95
+          },
+          "script": {
+            "type": "string",
+            "example": "Devanagari"
+          },
+          "is_supported": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "TranslationRequest": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text content to translate",
+            "example": "Hello, how are you?"
+          },
+          "file_id": {
+            "type": "string",
+            "description": "Alternative to text: translate content from uploaded file"
+          },
+          "source_language": {
+            "type": "string",
+            "description": "Source language code (en or Indian language)",
+            "example": "en"
+          },
+          "target_languages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Array of target language codes",
+            "example": ["hi", "ta", "bn"]
+          },
+          "domain": {
+            "type": "string",
+            "description": "Domain for cultural localization",
+            "enum": ["general", "healthcare", "construction", "technical", "legal", "education"],
+            "example": "general",
+            "default": "general"
+          },
+          "apply_localization": {
+            "type": "boolean",
+            "description": "Apply cultural and domain-specific localization",
+            "default": true
+          }
+        },
+        "required": ["source_language", "target_languages"]
+      },
+      "BatchTranslationResponse": {
+        "type": "object",
+        "properties": {
+          "translations": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "confidence": {
+                  "type": "number",
+                  "format": "float"
+                },
+                "localized": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "example": {
+              "hi": {
+                "text": "नमस्ते, आप कैसे हैं?",
+                "confidence": 0.92,
+                "localized": true
+              },
+              "ta": {
+                "text": "வணக்கம், நீங்கள் எப்படி இருக்கிறீர்கள்?",
+                "confidence": 0.89,
+                "localized": true
+              }
+            }
+          },
+          "source_text": {
+            "type": "string",
+            "example": "Hello, how are you?"
+          },
+          "source_language": {
+            "type": "string",
+            "example": "en"
+          },
+          "domain": {
+            "type": "string",
+            "example": "general"
+          },
+          "translation_time": {
+            "type": "number",
+            "format": "float",
+            "example": 1.23
+          },
+          "model_used": {
+            "type": "string",
+            "example": "IndicTrans2"
+          },
+          "success": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "STTResponse": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "example": "नमस्ते, मेरा नाम राहुल है"
+          },
+          "language": {
+            "type": "string",
+            "example": "hi"
+          },
+          "confidence": {
+            "type": "number",
+            "format": "float",
+            "example": 0.94
+          },
+          "duration": {
+            "type": "number",
+            "format": "float",
+            "example": 3.2
+          },
+          "processing_time": {
+            "type": "number",
+            "format": "float",
+            "example": 0.8
+          },
+          "model_used": {
+            "type": "string",
+            "example": "whisper-large-v3"
+          },
+          "success": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "TTSRequest": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to convert to speech",
+            "example": "नमस्ते, आपका स्वागत है"
+          },
+          "language": {
+            "type": "string",
+            "description": "Language code for TTS",
+            "example": "hi"
+          },
+          "voice": {
+            "type": "string",
+            "description": "Voice type",
+            "enum": ["male", "female"],
+            "default": "female"
+          }
+        },
+        "required": ["text", "language"]
+      },
+      "AudioLocalizationResponse": {
+        "type": "object",
+        "properties": {
+          "original_text": {
+            "type": "string",
+            "example": "Welcome to our healthcare center"
+          },
+          "translated_text": {
+            "type": "string",
+            "example": "हमारे स्वास्थ्य केंद्र में आपका स्वागत है"
+          },
+          "source_language": {
+            "type": "string",
+            "example": "en"
+          },
+          "target_language": {
+            "type": "string",
+            "example": "hi"
+          },
+          "audio_file": {
+            "type": "string",
+            "example": "/storage/outputs/audio_localized_hi_1234567890.mp3"
+          },
+          "processing_time": {
+            "type": "number",
+            "format": "float",
+            "example": 4.5
+          },
+          "success": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "VideoLocalizationResponse": {
+        "type": "object",
+        "properties": {
+          "video_file": {
+            "type": "string",
+            "example": "training_video.mp4"
+          },
+          "target_language": {
+            "type": "string",
+            "example": "hi"
+          },
+          "extracted_audio": {
+            "type": "string",
+            "example": "/storage/outputs/extracted_audio_1234567890.wav"
+          },
+          "subtitles": {
+            "type": "object",
+            "properties": {
+              "srt_file": {
+                "type": "string",
+                "example": "/storage/outputs/video_subtitles_hi_1234567890.srt"
+              },
+              "segments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "string",
+                      "example": "00:00:01,000"
+                    },
+                    "end": {
+                      "type": "string",
+                      "example": "00:00:05,000"
+                    },
+                    "text": {
+                      "type": "string",
+                      "example": "स्वागत है हमारे प्रशिक्षण कार्यक्रम में"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "processing_time": {
+            "type": "number",
+            "format": "float",
+            "example": 45.2
+          },
+          "success": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "AssessmentTranslationResponse": {
+        "type": "object",
+        "properties": {
+          "original_file": {
+            "type": "string",
+            "example": "quiz.json"
+          },
+          "translated_file": {
+            "type": "string",
+            "example": "/storage/outputs/assessment_hi_1234567890.json"
+          },
+          "target_language": {
+            "type": "string",
+            "example": "hi"
+          },
+          "questions_translated": {
+            "type": "integer",
+            "example": 10
+          },
+          "processing_time": {
+            "type": "number",
+            "format": "float",
+            "example": 2.3
+          },
+          "success": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "IntegrationUploadResponse": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "example": "job_abc123def456"
+          },
+          "status": {
+            "type": "string",
+            "example": "queued"
+          },
+          "content_type": {
+            "type": "string",
+            "example": "document"
+          },
+          "target_languages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": ["hi", "ta", "bn"]
+          },
+          "estimated_completion": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-15T10:30:00Z"
+          },
+          "partner_id": {
+            "type": "string",
+            "example": "NCVET_001"
+          },
+          "priority": {
+            "type": "string",
+            "example": "high"
+          },
+          "success": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "IntegrationStatusResponse": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "example": "job_abc123def456"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["queued", "processing", "completed", "failed"],
+            "example": "completed"
+          },
+          "progress": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "example": 100
+          },
+          "current_stage": {
+            "type": "string",
+            "example": "finalized"
+          },
+          "results": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "hi": "/storage/outputs/document_hi_1234567890.pdf",
+              "ta": "/storage/outputs/document_ta_1234567890.pdf",
+              "bn": "/storage/outputs/document_bn_1234567890.pdf"
+            }
+          },
+          "processing_time": {
+            "type": "number",
+            "format": "float",
+            "example": 180.5
+          },
+          "completion_time": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-15T10:35:00Z"
+          },
+          "success": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "SimpleUploadResponse": {
+        "type": "object",
+        "properties": {
+          "file_id": {
+            "type": "string",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          },
+          "filename": {
+            "type": "string",
+            "example": "document.pdf"
+          },
+          "size": {
+            "type": "integer",
+            "example": 1048576
+          },
+          "path": {
+            "type": "string",
+            "example": "/storage/uploads/550e8400-e29b-41d4-a716-446655440000/document.pdf"
+          },
+          "status": {
+            "type": "string",
+            "example": "uploaded"
+          }
+        }
+      },
+      "FeedbackRequest": {
+        "type": "object",
+        "properties": {
+          "rating": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "description": "Rating from 1 to 5",
+            "example": 5
+          },
+          "comments": {
+            "type": "string",
+            "description": "Optional feedback comments",
+            "example": "Excellent translation quality!"
+          },
+          "translation_id": {
+            "type": "string",
+            "description": "Optional translation ID for context"
+          }
+        },
+        "required": ["rating"]
+      },
+      "FeedbackResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "success"
+          },
+          "message": {
+            "type": "string",
+            "example": "Feedback saved successfully"
+          },
+          "rating": {
+            "type": "integer",
+            "example": 5
+          },
+          "comments": {
+            "type": "string",
+            "example": "Excellent translation quality!"
+          }
+        }
+      },
+      "EvaluationRequest": {
+        "type": "object",
+        "properties": {
+          "translation_id": {
+            "type": "string",
+            "description": "ID of translation to evaluate",
+            "example": "trans_123"
+          },
+          "reference_text": {
+            "type": "string",
+            "description": "Reference text for evaluation",
+            "example": "नमस्ते, आप कैसे हैं?"
+          }
+        },
+        "required": ["translation_id", "reference_text"]
+      },
+      "EvaluationResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "eval_456"
+          },
+          "translation_id": {
+            "type": "string",
+            "example": "trans_123"
+          },
+          "bleu_score": {
+            "type": "number",
+            "format": "float",
+            "example": 0.85
+          },
+          "comet_score": {
+            "type": "number",
+            "format": "float",
+            "example": 0.78
+          },
+          "reference_text": {
+            "type": "string",
+            "example": "नमस्ते, आप कैसे हैं?"
+          },
+          "evaluator_id": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-15T10:00:00Z"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "detail": {
+            "type": "string",
+            "example": "Error message description"
+          },
+          "error_code": {
+            "type": "string",
+            "example": "TRANSLATION_FAILED"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2024-01-15T10:00:00Z"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}

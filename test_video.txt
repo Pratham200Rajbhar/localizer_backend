@@ -1,0 +1,2 @@
+# This would be a test video file, but since we can't create actual video files, 
+# let me test with text files for the assessment endpoint instead

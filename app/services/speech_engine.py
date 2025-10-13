@@ -480,6 +480,148 @@ class ProductionSpeechEngine:
             "success": True
         }
     
+    async def speech_to_text_with_timestamps(
+        self, 
+        audio_path: str, 
+        language: Optional[str] = None
+    ) -> Dict[str, Union[str, float, list]]:
+        """
+        Convert speech to text with detailed timestamps for subtitle generation
+        
+        Args:
+            audio_path: Path to audio file
+            language: Optional language code
+        
+        Returns:
+            Dict with text, language, duration, and segments with timestamps
+        """
+        if not WHISPER_AVAILABLE:
+            raise ValueError("Whisper not available for STT with timestamps")
+        
+        try:
+            # Load Whisper model
+            if not self.load_whisper_model():
+                raise ValueError("Failed to load Whisper model")
+            
+            app_logger.info(f"Processing STT with timestamps: {audio_path}")
+            start_time = time.time()
+            
+            # Transcribe with word-level timestamps
+            options = {
+                "language": language,
+                "word_timestamps": True,
+                "verbose": False
+            }
+            
+            result = self.whisper_model.transcribe(audio_path, **options)
+            
+            processing_time = time.time() - start_time
+            
+            # Extract segments with timestamps
+            segments = []
+            for segment in result.get("segments", []):
+                segments.append({
+                    "start": segment["start"],
+                    "end": segment["end"],
+                    "text": segment["text"].strip(),
+                    "words": segment.get("words", [])
+                })
+            
+            # Update statistics
+            self.stt_stats["total_processed"] += 1
+            self.stt_stats["avg_time"] = (
+                (self.stt_stats["avg_time"] * (self.stt_stats["total_processed"] - 1) + processing_time) 
+                / self.stt_stats["total_processed"]
+            )
+            
+            app_logger.info(f"STT with timestamps completed in {processing_time:.2f}s")
+            
+            return {
+                "text": result["text"].strip(),
+                "language": result["language"],
+                "duration": segments[-1]["end"] if segments else 0,
+                "segments": segments,
+                "processing_time": processing_time
+            }
+            
+        except Exception as e:
+            app_logger.error(f"STT with timestamps failed: {e}")
+            raise ValueError(f"Speech-to-text with timestamps failed: {str(e)}")
+
+    def generate_srt_subtitles(self, transcript_result: Dict) -> str:
+        """
+        Generate SRT format subtitles from Whisper transcript result
+        
+        Args:
+            transcript_result: Result from speech_to_text_with_timestamps
+        
+        Returns:
+            str: SRT formatted subtitle content
+        """
+        segments = transcript_result.get("segments", [])
+        if not segments:
+            return ""
+        
+        srt_content = []
+        
+        for i, segment in enumerate(segments, 1):
+            start_time = self._seconds_to_srt_time(segment["start"])
+            end_time = self._seconds_to_srt_time(segment["end"])
+            text = segment["text"].strip()
+            
+            if text:  # Only add non-empty segments
+                srt_content.append(f"{i}")
+                srt_content.append(f"{start_time} --> {end_time}")
+                srt_content.append(text)
+                srt_content.append("")  # Empty line between segments
+        
+        return "\n".join(srt_content)
+
+    def generate_text_transcript(self, transcript_result: Dict) -> str:
+        """
+        Generate plain text transcript from Whisper result
+        
+        Args:
+            transcript_result: Result from speech_to_text_with_timestamps
+        
+        Returns:
+            str: Plain text transcript with timestamps
+        """
+        segments = transcript_result.get("segments", [])
+        if not segments:
+            return transcript_result.get("text", "")
+        
+        transcript_lines = []
+        transcript_lines.append(f"TRANSCRIPT")
+        transcript_lines.append(f"Language: {transcript_result.get('language', 'unknown')}")
+        transcript_lines.append(f"Duration: {transcript_result.get('duration', 0):.2f} seconds")
+        transcript_lines.append("-" * 50)
+        
+        for segment in segments:
+            start_time = self._seconds_to_time_string(segment["start"])
+            end_time = self._seconds_to_time_string(segment["end"])
+            text = segment["text"].strip()
+            
+            if text:
+                transcript_lines.append(f"[{start_time} - {end_time}] {text}")
+        
+        return "\n".join(transcript_lines)
+
+    def _seconds_to_srt_time(self, seconds: float) -> str:
+        """Convert seconds to SRT time format (HH:MM:SS,mmm)"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        milliseconds = int((seconds % 1) * 1000)
+        
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
+
+    def _seconds_to_time_string(self, seconds: float) -> str:
+        """Convert seconds to readable time format (MM:SS)"""
+        minutes = int(seconds // 60)
+        secs = int(seconds % 60)
+        return f"{minutes:02d}:{secs:02d}"
+    
     def get_supported_languages(self) -> Dict[str, any]:
         """Get supported languages for speech processing"""
         return {
