@@ -5,8 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from app.core.db import get_db
-from app.core.security import get_current_user
-from app.models.user import User
 from app.models.translation import Translation
 from app.models.feedback import Feedback
 from app.schemas.feedback import FeedbackCreate, FeedbackResponse
@@ -21,8 +19,7 @@ simple_router = APIRouter(tags=["Simple Feedback"])
 
 @simple_router.post("/feedback")
 async def submit_simple_feedback(
-    request: dict,
-    current_user: User = Depends(get_current_user)
+    request: dict
 ):
     """
     Simple feedback endpoint - saves rating/comments to storage/feedback.json
@@ -54,10 +51,9 @@ async def submit_simple_feedback(
         # Create feedback entry
         feedback_entry = {
             "timestamp": datetime.now().isoformat(),
-            "user_id": current_user.id,
-            "username": current_user.username,
             "rating": rating,
-            "comments": comments
+            "comments": comments,
+            "source": "anonymous"
         }
         
         # Ensure storage directory exists
@@ -82,7 +78,7 @@ async def submit_simple_feedback(
         with open(feedback_file, "w") as f:
             json.dump(feedback_list, f, indent=2)
         
-        app_logger.info(f"Feedback saved: {rating} stars - {current_user.username}")
+        app_logger.info(f"Feedback saved: {rating} stars - anonymous")
         
         return {
             "status": "success",
@@ -102,8 +98,7 @@ async def submit_simple_feedback(
 @router.post("", response_model=FeedbackResponse, status_code=status.HTTP_201_CREATED)
 async def submit_feedback(
     feedback_data: FeedbackCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """
     Submit feedback for a translation/job
@@ -129,7 +124,6 @@ async def submit_feedback(
                 )
             # Create placeholder translation for feedback purposes
             placeholder_translation = Translation(
-                user_id=current_user.id,
                 file_id=feedback_data.file_id,
                 source_language="en",
                 target_language="hi",
@@ -155,7 +149,6 @@ async def submit_feedback(
         # Create feedback
         feedback = Feedback(
             translation_id=translation_id,
-            user_id=current_user.id,
             rating=feedback_data.rating,
             comments=feedback_data.comments,
             corrections=str(feedback_data.corrections) if feedback_data.corrections else None
@@ -170,7 +163,7 @@ async def submit_feedback(
         
         app_logger.info(
             f"Feedback submitted: translation_id={feedback_data.translation_id}, "
-            f"rating={feedback_data.rating}, user={current_user.username}"
+            f"rating={feedback_data.rating}, user=anonymous"
         )
         
         return feedback
@@ -188,8 +181,7 @@ async def list_feedback(
     skip: int = 0,
     limit: int = 100,
     translation_id: int = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """
     List feedback
@@ -201,9 +193,7 @@ async def list_feedback(
     if translation_id:
         query = query.filter(Feedback.translation_id == translation_id)
     
-    if current_user.role != "admin":
-        query = query.filter(Feedback.user_id == current_user.id)
-    
+    # Show all feedback without user restrictions
     feedback_list = query.offset(skip).limit(limit).all()
     
     return feedback_list
@@ -212,8 +202,7 @@ async def list_feedback(
 @router.get("/{feedback_id}", response_model=FeedbackResponse)
 async def get_feedback(
     feedback_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """
     Get specific feedback
@@ -226,21 +215,14 @@ async def get_feedback(
             detail="Feedback not found"
         )
     
-    # Check permissions
-    if current_user.role != "admin" and feedback.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
-        )
-    
+    # Allow all users to view feedback without auth
     return feedback
 
 
 @router.delete("/{feedback_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_feedback(
     feedback_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """
     Delete feedback
@@ -253,17 +235,12 @@ async def delete_feedback(
             detail="Feedback not found"
         )
     
-    # Check permissions
-    if current_user.role != "admin" and feedback.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
-        )
+    # Allow all users to delete feedback without auth
     
     db.delete(feedback)
     db.commit()
     
-    app_logger.info(f"Feedback deleted: {feedback_id} by user {current_user.username}")
+    app_logger.info(f"Feedback deleted: {feedback_id} by anonymous user")
     
     return None
 

@@ -5,8 +5,6 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, s
 from sqlalchemy.orm import Session
 from typing import Optional
 from app.core.db import get_db
-from app.core.security import get_current_user
-from app.models.user import User
 from app.models.file import File as FileModel
 from app.schemas.file import FileResponse
 from app.utils.file_manager import file_manager
@@ -23,8 +21,7 @@ MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB (increased for audio/video files)
 
 @upload_router.post("/upload")
 async def upload_simple(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user)
+    file: UploadFile = File(...)
 ):
     """
     Simple upload endpoint - saves to storage/uploads/<id>/
@@ -99,8 +96,7 @@ async def upload_file(
     file: UploadFile = File(...),
     domain: Optional[str] = Form(None),
     source_language: Optional[str] = Form(None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """
     Upload a content file for translation
@@ -139,8 +135,7 @@ async def upload_file(
             file_type=file_ext,
             size=saved_file["size"],
             domain=domain,
-            source_language=source_language,
-            uploader_id=current_user.id
+            source_language=source_language
         )
         
         db.add(db_file)
@@ -148,7 +143,7 @@ async def upload_file(
         db.refresh(db_file)
         
         app_logger.info(
-            f"File uploaded: {file.filename} by user {current_user.username}"
+            f"File uploaded: {file.filename}"
         )
         
         return db_file
@@ -165,20 +160,14 @@ async def upload_file(
 async def list_files(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """
     List uploaded files
     
-    Admins see all files, others see only their own
+    Shows all files (no user restrictions without auth)
     """
-    if current_user.role == "admin":
-        files = db.query(FileModel).offset(skip).limit(limit).all()
-    else:
-        files = db.query(FileModel).filter(
-            FileModel.uploader_id == current_user.id
-        ).offset(skip).limit(limit).all()
+    files = db.query(FileModel).offset(skip).limit(limit).all()
     
     return files
 
@@ -186,8 +175,7 @@ async def list_files(
 @router.get("/files/{file_id}", response_model=FileResponse)
 async def get_file(
     file_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """
     Get file details
@@ -200,12 +188,7 @@ async def get_file(
             detail="File not found"
         )
     
-    # Check permissions
-    if current_user.role != "admin" and file.uploader_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
-        )
+    # Allow all users to access files without auth
     
     return file
 
@@ -213,8 +196,7 @@ async def get_file(
 @router.delete("/files/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_file(
     file_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """
     Delete a file
@@ -227,12 +209,7 @@ async def delete_file(
             detail="File not found"
         )
     
-    # Check permissions
-    if current_user.role != "admin" and file.uploader_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
-        )
+    # Allow all users to delete files without auth
     
     # Delete from disk
     file_manager.delete_file(file.path)
@@ -241,7 +218,7 @@ async def delete_file(
     db.delete(file)
     db.commit()
     
-    app_logger.info(f"File deleted: {file.filename} by user {current_user.username}")
+    app_logger.info(f"File deleted: {file.filename}")
     
     return None
 

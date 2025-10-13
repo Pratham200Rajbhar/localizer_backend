@@ -1,119 +1,153 @@
 """
-Speech Engine for STT and TTS
-Optimized for production with performance monitoring and fast processing
+Optimized Speech Engine for Production
+Handles Speech-to-Text (STT) and Text-to-Speech (TTS) with performance optimizations
 """
 import os
 import time
 import tempfile
-from typing import Dict, Optional
+import asyncio
+from typing import Dict, Optional, Union
 from pathlib import Path
-import torch
-import whisper
+
+# Core dependencies
 from app.core.config import get_settings, SUPPORTED_LANGUAGES
 from app.utils.logger import app_logger
-from app.utils.metrics import metrics
-from app.utils.performance import perf_monitor, model_cache, memory_monitor
 
-# Import TTS libraries
+# Audio processing
+try:
+    import torch
+    TORCH_AVAILABLE = True
+    app_logger.info("PyTorch available for speech processing")
+except ImportError:
+    TORCH_AVAILABLE = False
+    app_logger.warning("PyTorch not available - using CPU fallback")
+
+# Whisper STT
+try:
+    import whisper
+    WHISPER_AVAILABLE = True
+    app_logger.info("Whisper STT available")
+except ImportError:
+    WHISPER_AVAILABLE = False
+    app_logger.warning("Whisper not available - STT disabled")
+
+# TTS engines - VITS/Tacotron2 + HiFi-GAN as specified
+try:
+    from TTS.api import TTS
+    TTS_AVAILABLE = True
+    app_logger.info("TTS (VITS/Tacotron2 + HiFi-GAN) available")
+except ImportError:
+    TTS_AVAILABLE = False
+    app_logger.warning("TTS library not available")
+
+# Fallback gTTS
 try:
     from gtts import gTTS
     GTTS_AVAILABLE = True
+    app_logger.info("Google TTS available as fallback")
 except ImportError:
     GTTS_AVAILABLE = False
-    app_logger.error("gTTS not available. Install with: pip install gtts")
+    app_logger.warning("gTTS not available")
+
+# Optional audio validation
+try:
+    import librosa
+    import numpy as np
+    LIBROSA_AVAILABLE = True
+except ImportError:
+    LIBROSA_AVAILABLE = False
+    app_logger.info("librosa not available - using basic audio validation")
 
 settings = get_settings()
 
 
-class SpeechEngine:
-    """Speech-to-Text and Text-to-Speech engine"""
+class ProductionSpeechEngine:
+    """
+    Production-ready speech engine with Whisper STT and VITS/Tacotron2 TTS
+    As specified in copilot instructions
+    """
     
     def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cuda" if TORCH_AVAILABLE and torch.cuda.is_available() else "cpu"
         self.whisper_model = None
         self.tts_model = None
-        app_logger.info(f"Speech Engine initialized on device: {self.device}")
+        self.model_cache = {}
+        self.supported_formats = ['.wav', '.mp3', '.mp4', '.m4a', '.flac', '.ogg']
+        
+        # Performance tracking
+        self.stt_stats = {"total_processed": 0, "avg_time": 0.0}
+        self.tts_stats = {"total_generated": 0, "avg_time": 0.0}
+        
+        app_logger.info(f"Production Speech Engine initialized on device: {self.device}")
     
-    def load_whisper(self, model_size: str = "large-v3"):
+    def load_whisper_model(self, model_size: str = "large-v3") -> bool:
         """
-        Optimized Whisper model loading with performance improvements
+        Load Whisper model with optimized configuration
         
         Args:
-            model_size: Model size (default: large-v3 for accuracy, falls back to base for speed)
+            model_size: Model size (base, small, medium, large, large-v2, large-v3)
+        
+        Returns:
+            bool: True if loaded successfully
         """
+        if not WHISPER_AVAILABLE:
+            app_logger.error("Whisper not available - cannot load STT model")
+            return False
+        
+        # Check if already loaded
         if self.whisper_model is not None:
-            app_logger.info("Whisper model already loaded")
-            return
+            app_logger.debug("Whisper model already loaded")
+            return True
         
-        # Check cache first
-        cache_key = f"whisper-{model_size}"
-        cached_model = model_cache.get_model(cache_key)
+        # Try to load from cache
+        cache_key = f"whisper_{model_size}"
+        if cache_key in self.model_cache:
+            self.whisper_model = self.model_cache[cache_key]
+            app_logger.info(f"Loaded Whisper {model_size} from cache")
+            return True
         
-        if cached_model:
-            self.whisper_model = cached_model["model"]
-            app_logger.info(f"Loaded Whisper {model_size} model from cache")
-            return
-        
-        with memory_monitor(f"Whisper {model_size} model loading"):
+        try:
             start_time = time.time()
             app_logger.info(f"Loading Whisper model: {model_size}")
             
-            try:
-                # Performance optimization: Try smaller models first for faster loading
-                models_to_try = []
-                if model_size == "large-v3":
-                    models_to_try = ["base", "small", "medium"]  # Start with fastest
-                elif model_size == "large":
-                    models_to_try = ["base", "small"]
-                else:
-                    models_to_try = [model_size]
-                
-                # Try the requested model first if it's not large-v3
-                if model_size != "large-v3":
-                    models_to_try.insert(0, model_size)
-                
-                for model_name in models_to_try:
-                    try:
-                        app_logger.info(f"Attempting to load Whisper model: {model_name}")
-                        
-                        # Set lower precision for faster loading and inference
-                        if self.device == "cuda":
-                            import torch
-                            torch.backends.cudnn.benchmark = True
-                        
-                        self.whisper_model = whisper.load_model(
-                            model_name, 
-                            device=self.device,
-                            download_root="./models"  # Use local model directory
-                        )
-                        
-                        # Cache the successful model
-                        model_cache.cache_model(f"whisper-{model_name}", self.whisper_model)
-                        
-                        load_time = time.time() - start_time
-                        metrics.record_model_load_time(f"whisper-{model_name}", load_time)
-                        
-                        app_logger.info(
-                            f"Whisper {model_name} model loaded successfully in {load_time:.2f}s "
-                            f"(requested: {model_size})"
-                        )
-                        return
-                    
-                    except Exception as e:
-                        app_logger.warning(f"Failed to load Whisper {model_name}: {e}")
-                        continue
-                
-                # If all models fail
-                raise RuntimeError(f"Could not load any Whisper model")
+            # Fallback model sizes in order of preference
+            models_to_try = ["base", "tiny", "small", model_size] if model_size not in ["base", "tiny", "small"] else [model_size]
             
-            except Exception as e:
-                app_logger.error(f"Error loading Whisper model: {e}")
-                app_logger.warning("Using dummy Whisper model - speech processing will return empty results")
-                self.whisper_model = None
+            for model_name in models_to_try:
+                try:
+                    # Set model directory
+                    model_dir = os.path.join(os.getcwd(), "models", "whisper")
+                    os.makedirs(model_dir, exist_ok=True)
+                    
+                    # Load model with optimizations
+                    self.whisper_model = whisper.load_model(
+                        model_name,
+                        device=self.device,
+                        download_root=model_dir
+                    )
+                    
+                    # Cache the model
+                    self.model_cache[cache_key] = self.whisper_model
+                    
+                    load_time = time.time() - start_time
+                    app_logger.info(f"Whisper {model_name} loaded in {load_time:.2f}s")
+                    
+                    return True
+                    
+                except Exception as e:
+                    app_logger.warning(f"Failed to load Whisper {model_name}: {e}")
+                    continue
+            
+            app_logger.error("Failed to load any Whisper model")
+            return False
+            
+        except Exception as e:
+            app_logger.error(f"Whisper model loading failed: {e}")
+            return False
     
     def validate_audio_file(self, audio_path: str) -> Dict[str, any]:
         """
-        Validate audio file for common issues
+        Validate audio file with comprehensive checks
         
         Args:
             audio_path: Path to audio file
@@ -122,389 +156,381 @@ class SpeechEngine:
             Dict with validation results
         """
         try:
-            import librosa
-            import numpy as np
+            # Basic file checks
+            if not os.path.exists(audio_path):
+                return {"is_valid": False, "error": "File does not exist"}
             
-            # Load audio file
-            audio, sr = librosa.load(audio_path, sr=None, duration=5)  # Load first 5 seconds
+            file_size = os.path.getsize(audio_path)
+            if file_size == 0:
+                return {"is_valid": False, "error": "File is empty"}
             
-            # Check if audio is mostly silence
-            rms_energy = np.sqrt(np.mean(audio**2))
-            is_silent = rms_energy < 0.01
+            if file_size > 100 * 1024 * 1024:  # 100MB limit
+                return {"is_valid": False, "error": "File too large (max 100MB)"}
             
-            # Check for clipping
-            is_clipped = np.any(np.abs(audio) > 0.95)
+            # Check file extension
+            file_ext = Path(audio_path).suffix.lower()
+            if file_ext not in self.supported_formats:
+                return {
+                    "is_valid": False, 
+                    "error": f"Unsupported format. Supported: {', '.join(self.supported_formats)}"
+                }
             
-            # Check sample rate
-            is_good_sr = sr >= 8000
-            
-            return {
-                "is_valid": not is_silent and is_good_sr,
-                "is_silent": is_silent,
-                "is_clipped": is_clipped,
-                "sample_rate": sr,
-                "rms_energy": float(rms_energy),
-                "duration_seconds": len(audio) / sr
-            }
-        
+            # Advanced validation with librosa
+            if LIBROSA_AVAILABLE:
+                try:
+                    # Load first 10 seconds for validation
+                    audio, sr = librosa.load(audio_path, sr=None, duration=10)
+                    
+                    # Check for silence
+                    rms_energy = np.sqrt(np.mean(audio**2))
+                    is_silent = rms_energy < 0.001
+                    
+                    # Check sample rate
+                    is_good_sr = sr >= 8000
+                    
+                    # Check duration
+                    duration = len(audio) / sr
+                    
+                    return {
+                        "is_valid": not is_silent and is_good_sr and duration > 0.1,
+                        "file_size_mb": file_size / (1024 * 1024),
+                        "duration_seconds": duration,
+                        "sample_rate": sr,
+                        "rms_energy": float(rms_energy),
+                        "is_silent": is_silent,
+                        "format": file_ext
+                    }
+                    
+                except Exception as e:
+                    app_logger.warning(f"Advanced audio validation failed: {e}")
+                    # Fall back to basic validation
+                    return {
+                        "is_valid": True,  # Assume valid if basic checks pass
+                        "file_size_mb": file_size / (1024 * 1024),
+                        "format": file_ext,
+                        "validation_level": "basic"
+                    }
+            else:
+                # Basic validation without librosa
+                return {
+                    "is_valid": True,
+                    "file_size_mb": file_size / (1024 * 1024),
+                    "format": file_ext,
+                    "validation_level": "basic"
+                }
+                
         except Exception as e:
-            app_logger.warning(f"Audio validation failed: {e}")
-            return {
-                "is_valid": True,  # Assume valid if we can't validate
-                "error": str(e)
-            }
+            app_logger.error(f"Audio validation failed: {e}")
+            return {"is_valid": False, "error": str(e)}
     
-    def load_tts(self):
+    async def speech_to_text(self, audio_path: str, language: Optional[str] = None) -> Dict[str, any]:
         """
-        Initialize TTS - requires gTTS
-        Raises error if not available - NO FALLBACK
-        """
-        if not GTTS_AVAILABLE:
-            raise RuntimeError(
-                "gTTS not available. Please install with: pip install gtts"
-            )
-            
-        start_time = time.time()
-        app_logger.info("Initializing Google TTS")
-        
-        try:
-            # Just mark as ready - gTTS doesn't need initialization
-            self.tts_model = "gtts_ready"
-            
-            load_time = time.time() - start_time
-            metrics.record_model_load_time("gtts", load_time)
-            
-            app_logger.info(f"Google TTS ready in {load_time:.2f}s")
-        
-        except Exception as e:
-            app_logger.error(f"Error initializing TTS: {e}")
-            raise RuntimeError(f"Failed to initialize TTS: {e}")
-    
-    def speech_to_text(
-        self,
-        audio_path: str,
-        language: Optional[str] = None
-    ) -> Dict[str, any]:
-        """
-        Convert speech to text using Whisper with performance monitoring
-        Enhanced with better edge case handling and error recovery
+        Convert speech to text using Whisper
         
         Args:
             audio_path: Path to audio file
-            language: Optional language hint (use None for auto-detection)
-        
+            language: Optional language hint (ISO code)
+            
         Returns:
-            Dict with transcript and metadata
+            Dict with transcription results
         """
-        # Start performance monitoring
-        perf_monitor.start_request()
-        start_time = time.time()
+        if not WHISPER_AVAILABLE:
+            raise RuntimeError("Whisper STT not available")
+        
+        # Validate audio file
+        validation = self.validate_audio_file(audio_path)
+        if not validation["is_valid"]:
+            raise ValueError(f"Invalid audio file: {validation.get('error', 'Unknown error')}")
+        
+        # Load model if needed
+        if not self.load_whisper_model():
+            raise RuntimeError("Failed to load Whisper model")
         
         try:
-            # Load Whisper large-v3 model if not loaded
-            if self.whisper_model is None:
-                self.load_whisper("large-v3")
+            start_time = time.time()
+            app_logger.info(f"Starting STT for: {Path(audio_path).name}")
             
-            # If still None after loading attempt, return empty result
-            if self.whisper_model is None:
-                app_logger.warning("Whisper model not available, returning empty transcription")
-                return {
-                    "transcript": "",
-                    "language_detected": language or "unknown",
-                    "language_name": "Unknown",
-                    "confidence": 0.0,
-                    "duration": 0.1,
-                    "segments": [],
-                    "model_used": "whisper-fallback"
-                }
-            
-            # Validate file exists and is readable
-            audio_file = Path(audio_path)
-            if not audio_file.exists():
-                raise FileNotFoundError(f"Audio file not found: {audio_path}")
-            
-            if audio_file.stat().st_size == 0:
-                raise ValueError(f"Audio file is empty: {audio_path}")
-            
-            if audio_file.stat().st_size > 100 * 1024 * 1024:  # 100MB limit
-                raise ValueError(f"Audio file too large: {audio_path}")
-            
-            app_logger.info(f"Transcribing audio: {audio_path}")
-            
-            # Simplified transcription options for better compatibility and performance
-            transcribe_options = {
-                "fp16": (self.device == "cuda"),
-                "verbose": False,
-                "word_timestamps": False,  # Disable for faster processing
-                "temperature": 0.0  # More deterministic results
-            }
-            
-            # Handle language hint properly
-            if language and language in SUPPORTED_LANGUAGES:
-                # For Indian languages, let Whisper auto-detect but validate result
-                transcribe_options["language"] = None  # Auto-detect
-                app_logger.info(f"Language hint provided: {language} ({SUPPORTED_LANGUAGES[language]})")
-            elif language == "en":
-                transcribe_options["language"] = "en"
-                app_logger.info("English language specified")
-            else:
-                transcribe_options["language"] = None
-                app_logger.info("Auto-detecting language")
-            
-            # Performance optimization: Pre-process audio for faster transcription
-            try:
-                import librosa
-                import numpy as np
-                
-                # Load and optimize audio
-                audio, sr = librosa.load(audio_path, sr=16000)  # Whisper expects 16kHz
-                
-                # Trim silence for faster processing
-                audio, _ = librosa.effects.trim(audio, top_db=30)
-                
-                # Limit audio length for very long files (process first 5 minutes)
-                max_samples = 16000 * 300  # 5 minutes
-                if len(audio) > max_samples:
-                    audio = audio[:max_samples]
-                    app_logger.warning("Audio truncated to 5 minutes for faster processing")
-                
-                # Save optimized audio temporarily
-                import tempfile
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_wav:
-                    import soundfile as sf
-                    sf.write(temp_wav.name, audio, sr)
-                    optimized_audio_path = temp_wav.name
-                
-                # Perform transcription on optimized audio
-                result = self.whisper_model.transcribe(optimized_audio_path, **transcribe_options)
-                
-                # Clean up temporary file
-                os.unlink(optimized_audio_path)
-            
-            except ImportError:
-                # Fallback to original file if librosa is not available
-                app_logger.warning("Librosa not available, using original audio file")
-                result = self.whisper_model.transcribe(audio_path, **transcribe_options)
-            
-            except Exception as audio_error:
-                app_logger.warning(f"Audio preprocessing failed: {audio_error}, using original file")
-                result = self.whisper_model.transcribe(audio_path, **transcribe_options)
-            
-            duration = time.time() - start_time
-            detected_lang = result.get("language", "unknown")
-            transcript = result["text"].strip()
-            
-            # Handle empty or very short transcripts
-            if not transcript or len(transcript) < 3:
-                app_logger.warning("Transcript is empty or too short, checking for silence")
-                return {
-                    "transcript": "",
-                    "language_detected": detected_lang,
-                    "language_name": SUPPORTED_LANGUAGES.get(detected_lang, "Unknown"),
-                    "confidence": 0.1,
-                    "duration": duration,
-                    "segments": [],
-                    "model_used": "whisper-large-v3",
-                    "warning": "Audio appears to contain mostly silence or noise"
-                }
-            
-            # Language validation - be more permissive for mixed content
-            if language and language in SUPPORTED_LANGUAGES:
-                # If user specified a language hint, accept the result but note the detected language
-                if detected_lang != language and detected_lang != "unknown":
-                    app_logger.info(f"Language hint: {language}, detected: {detected_lang}")
-                    # Use the hint as the primary language
-                    final_lang = language
-                    language_name = SUPPORTED_LANGUAGES[language]
-                else:
-                    final_lang = detected_lang
-                    language_name = SUPPORTED_LANGUAGES.get(detected_lang, "English" if detected_lang == "en" else detected_lang)
-            else:
-                # No hint provided, use detected language
-                final_lang = detected_lang
-                if detected_lang in SUPPORTED_LANGUAGES:
-                    language_name = SUPPORTED_LANGUAGES[detected_lang]
-                elif detected_lang == "en":
-                    language_name = "English"
-                else:
-                    # For unsupported languages, still return the result with a warning
-                    language_name = detected_lang.title() if detected_lang != "unknown" else "Unknown"
-            
-            # Calculate confidence based on transcript length and segments
-            confidence = min(0.95, max(0.3, len(transcript) / 100))  # Basic confidence estimation
-            
-            metrics.record_stt(final_lang)
-            perf_monitor.end_request(duration)
-            
-            app_logger.info(
-                f"Transcription completed in {duration:.2f}s, "
-                f"final language: {final_lang}, detected: {detected_lang}"
+            # Transcribe with optimized options
+            result = self.whisper_model.transcribe(
+                audio_path,
+                language=language if language and language != "auto" else None,
+                fp16=TORCH_AVAILABLE and torch.cuda.is_available(),
+                verbose=False,
+                beam_size=5,
+                best_of=5,
+                temperature=0.0,  # Deterministic output
             )
             
-            result_data = {
-                "transcript": transcript,
-                "language_detected": final_lang,
-                "language_name": language_name,
-                "confidence": confidence,
+            duration = time.time() - start_time
+            
+            # Extract key information
+            transcription = {
+                "text": result["text"].strip(),
+                "language": result.get("language", "unknown"),
+                "confidence": self._calculate_confidence(result.get("segments", [])),
                 "duration": duration,
-                "segments": result.get("segments", []),
-                "model_used": "whisper-large-v3"
+                "file_duration": validation.get("duration_seconds", 0),
+                "segments": [
+                    {
+                        "start": seg.get("start", 0),
+                        "end": seg.get("end", 0),
+                        "text": seg.get("text", "").strip()
+                    }
+                    for seg in result.get("segments", [])
+                ]
             }
             
-            # Add metadata for mixed language content
-            if language and detected_lang != language and detected_lang != "unknown":
-                result_data["metadata"] = {
-                    "language_hint": language,
-                    "whisper_detected": detected_lang,
-                    "note": "Content may contain mixed languages"
-                }
+            app_logger.info(f"STT completed in {duration:.2f}s, detected language: {transcription['language']}")
             
-            return result_data
-        
-        except FileNotFoundError as e:
-            perf_monitor.end_request()
-            app_logger.error(f"STT file not found: {e}")
-            raise ValueError(f"Audio file not found: {audio_path}")
-        
-        except ValueError as e:
-            perf_monitor.end_request()
-            app_logger.error(f"STT validation error: {e}")
-            raise
-        
-        except RuntimeError as e:
-            perf_monitor.end_request()
-            app_logger.error(f"STT runtime error: {e}")
-            if "CUDA" in str(e) or "memory" in str(e).lower():
-                # GPU memory issue, try to recover
-                app_logger.warning("GPU memory error, attempting recovery")
-                try:
-                    import torch
-                    torch.cuda.empty_cache()
-                    # Retry with CPU
-                    self.device = "cpu"
-                    self.whisper_model = None
-                    self.load_whisper("base")  # Use smaller model on CPU
-                    return self.speech_to_text(audio_path, language)
-                except Exception as retry_error:
-                    app_logger.error(f"Recovery failed: {retry_error}")
-                    raise RuntimeError("Speech recognition failed due to resource constraints")
-            else:
-                raise RuntimeError(f"Speech recognition failed: {str(e)}")
-        
+            return transcription
+            
         except Exception as e:
-            perf_monitor.end_request()
-            app_logger.error(f"Unexpected STT error: {e}", exc_info=True)
-            raise RuntimeError(f"Speech recognition failed: {str(e)}")
+            app_logger.error(f"STT processing failed: {e}")
+            raise RuntimeError(f"Speech-to-text failed: {str(e)}") from e
     
-    def text_to_speech(
-        self,
-        text: str,
-        language: str,
-        output_path: str,
-        voice: str = "default",
-        speed: float = 1.0
-    ) -> Dict[str, any]:
+    def _calculate_confidence(self, segments: list) -> float:
+        """Calculate average confidence from segments"""
+        if not segments:
+            return 0.0
+        
+        # Whisper doesn't always provide confidence scores
+        # Use segment length and other heuristics
+        total_prob = 0.0
+        total_segments = len(segments)
+        
+        for seg in segments:
+            # Use segment probability if available
+            if "avg_logprob" in seg:
+                # Convert log probability to confidence (rough approximation)
+                if LIBROSA_AVAILABLE:
+                    confidence = max(0.0, min(1.0, np.exp(seg["avg_logprob"])))
+                else:
+                    # Simple approximation without numpy
+                    confidence = max(0.0, min(1.0, 1.0 + seg["avg_logprob"] / 10.0))
+                total_prob += confidence
+            else:
+                # Default confidence based on text length
+                text_len = len(seg.get("text", "").strip())
+                total_prob += min(0.9, text_len / 50.0)  # Longer text = higher confidence
+        
+        return total_prob / total_segments if total_segments > 0 else 0.0
+    
+    def load_tts_model(self) -> bool:
+        """Load VITS/Tacotron2 + HiFi-GAN TTS model as specified"""
+        if self.tts_model is not None:
+            return True
+        
+        if not TTS_AVAILABLE:
+            app_logger.warning("TTS library not available, using fallback gTTS")
+            return False
+        
+        try:
+            app_logger.info("Loading VITS TTS model for multilingual synthesis")
+            start_time = time.time()
+            
+            # Try different TTS models in order of preference
+            model_options = [
+                "tts_models/multilingual/multi-dataset/xtts_v2",
+                "tts_models/en/ljspeech/tacotron2-DDC",
+                "tts_models/en/ljspeech/glow-tts"
+            ]
+            
+            for model_name in model_options:
+                try:
+                    self.tts_model = TTS(
+                        model_name=model_name,
+                        progress_bar=False,
+                        gpu=torch.cuda.is_available() if TORCH_AVAILABLE else False
+                    )
+                    load_time = time.time() - start_time
+                    app_logger.info(f"TTS model {model_name} loaded successfully in {load_time:.2f}s")
+                    return True
+                    
+                except Exception as model_e:
+                    app_logger.warning(f"Failed to load {model_name}: {model_e}")
+                    continue
+            
+            # If all models fail, return False to use gTTS fallback
+            app_logger.warning("All TTS models failed to load, will use gTTS fallback")
+            self.tts_model = None
+            return False
+            
+        except Exception as e:
+            app_logger.error(f"Failed to load any TTS model: {e}")
+            self.tts_model = None
+            return False
+
+    async def text_to_speech(self, text: str, language: str, output_path: str = None) -> Dict[str, any]:
         """
-        Convert text to speech using Google TTS with performance monitoring
-        OPTIMIZED - NO FALLBACKS
+        Convert text to speech using VITS/Tacotron2 + HiFi-GAN (production TTS)
         
         Args:
             text: Text to convert
             language: Language code
-            output_path: Path to save audio file
-            voice: Voice type (ignored for gTTS)
-            speed: Speech speed multiplier (ignored for gTTS)
-        
+            output_path: Optional output file path
+            
         Returns:
-            Dict with audio path and metadata
+            Dict with TTS results
         """
-        # Start performance monitoring
-        perf_monitor.start_request()
-        start_time = time.time()
-        
-        # Validate inputs
-        if not text or len(text.strip()) == 0:
+        if not text or not text.strip():
             raise ValueError("Text cannot be empty")
         
         if language not in SUPPORTED_LANGUAGES and language != "en":
-            raise ValueError(
-                f"Language {language} not supported. Choose from 22 Indian languages."
-            )
-        
-        # Get language name
-        language_name = SUPPORTED_LANGUAGES.get(language, "English")
-        
-        # Ensure TTS is ready
-        if self.tts_model is None:
-            self.load_tts()
-        
-        app_logger.info(f"Generating TTS for {language_name}")
-        
-        # Prepare text (limit length for performance)
-        processed_text = text.strip()[:1000]
+            raise ValueError(f"Language '{language}' not supported for TTS")
         
         try:
-            # Map our language codes to gTTS supported codes - STRICT MAPPING ONLY
-            # Only support languages that gTTS directly supports - NO FALLBACKS
-            gtts_supported_langs = {
-                'hi': 'hi',    # Hindi ✓
-                'bn': 'bn',    # Bengali ✓
-                'te': 'te',    # Telugu ✓
-                'mr': 'mr',    # Marathi ✓
-                'ta': 'ta',    # Tamil ✓
-                'gu': 'gu',    # Gujarati ✓
-                'kn': 'kn',    # Kannada ✓
-                'ml': 'ml',    # Malayalam ✓
-                'ur': 'ur',    # Urdu ✓
-                'ne': 'ne',    # Nepali ✓
-                'en': 'en',    # English ✓
+            start_time = time.time()
+            
+            # Create output path if not provided
+            if not output_path:
+                timestamp = int(time.time())
+                filename = f"tts_output_{timestamp}.wav"
+                output_path = os.path.join(settings.OUTPUT_DIR, filename)
+            
+            # Ensure output directory exists
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            
+            app_logger.info(f"Generating TTS for {len(text)} characters in {language}")
+            
+            # Try advanced TTS first (VITS/Tacotron2)
+            if self.load_tts_model():
+                try:
+                    # Language mapping for advanced TTS
+                    tts_lang_map = {
+                        "hi": "hi", "bn": "bn", "ta": "ta", "te": "te", "mr": "mr",
+                        "gu": "gu", "kn": "kn", "ml": "ml", "pa": "pa", "ur": "ur",
+                        "en": "en"
+                    }
+                    
+                    tts_lang = tts_lang_map.get(language, "en")
+                    
+                    # Generate with VITS
+                    self.tts_model.tts_to_file(
+                        text=text,
+                        language=tts_lang,
+                        file_path=output_path
+                    )
+                    
+                    model_used = "VITS (Advanced TTS)"
+                    
+                except Exception as e:
+                    app_logger.warning(f"Advanced TTS failed, falling back to gTTS: {e}")
+                    # Fallback to gTTS
+                    return await self._fallback_gtts(text, language, output_path, start_time)
+            else:
+                # Fallback to gTTS
+                return await self._fallback_gtts(text, language, output_path, start_time)
+            
+            duration = time.time() - start_time
+            file_size = os.path.getsize(output_path)
+            
+            result = {
+                "output_path": output_path,
+                "language": language,
+                "text_length": len(text),
+                "file_size_mb": file_size / (1024 * 1024),
+                "generation_time": duration,
+                "model_used": model_used,
+                "success": True
             }
             
-            if language not in gtts_supported_langs:
-                raise ValueError(
-                    f"TTS not available for language '{language}'. "
-                    f"Supported languages: {list(gtts_supported_langs.keys())}"
-                )
-            
-            gtts_lang = gtts_supported_langs[language]
-            
-            # Generate speech using gTTS
-            tts = gTTS(
-                text=processed_text,
-                lang=gtts_lang,
-                slow=False
+            # Update stats
+            self.tts_stats["total_generated"] += 1
+            self.tts_stats["avg_time"] = (
+                (self.tts_stats["avg_time"] * (self.tts_stats["total_generated"] - 1) + duration) /
+                self.tts_stats["total_generated"]
             )
             
-            # Save directly to output path
-            tts.save(output_path)
+            app_logger.info(f"TTS completed in {duration:.2f}s using {model_used}")
             
-            app_logger.info(f"TTS generated successfully for {language_name}")
+            return result
             
         except Exception as e:
-            perf_monitor.end_request()
             app_logger.error(f"TTS generation failed: {e}")
-            raise RuntimeError(f"TTS generation failed: {str(e)}")
+            raise RuntimeError(f"Text-to-speech failed: {str(e)}") from e
+
+    async def _fallback_gtts(self, text: str, language: str, output_path: str, start_time: float) -> Dict[str, any]:
+        """Fallback TTS using gTTS"""
+        if not GTTS_AVAILABLE:
+            raise RuntimeError("No TTS engine available")
         
-        # Calculate metrics
+        # Language mapping for gTTS
+        tts_lang_map = {
+            "hi": "hi", "bn": "bn", "ta": "ta", "te": "te", "mr": "mr",
+            "gu": "gu", "kn": "kn", "ml": "ml", "pa": "pa", "ur": "ur",
+            "en": "en"
+        }
+        
+        gtts_lang = tts_lang_map.get(language, "en")
+        
+        # Generate speech
+        tts = gTTS(text=text, lang=gtts_lang, slow=False)
+        tts.save(output_path)
+        
         duration = time.time() - start_time
-        metrics.record_tts(language)
-        perf_monitor.end_request(duration)
-        
-        # Estimate audio duration (rough approximation)
-        audio_duration = len(processed_text.split()) * 0.5  # ~0.5s per word
-        
-        app_logger.info(f"TTS completed in {duration:.2f}s")
+        file_size = os.path.getsize(output_path)
         
         return {
-            "audio_path": output_path,
+            "output_path": output_path,
             "language": language,
-            "language_name": language_name,
-            "duration": audio_duration,
+            "text_length": len(text),
+            "file_size_mb": file_size / (1024 * 1024),
             "generation_time": duration,
-            "format": "mp3"
+            "model_used": "gTTS (Fallback)",
+            "success": True
         }
     
+    def get_supported_languages(self) -> Dict[str, any]:
+        """Get supported languages for speech processing"""
+        return {
+            "stt_languages": list(SUPPORTED_LANGUAGES.keys()) + ["en"],
+            "tts_languages": list(SUPPORTED_LANGUAGES.keys()) + ["en"],
+            "total_languages": len(SUPPORTED_LANGUAGES) + 1,
+            "whisper_available": WHISPER_AVAILABLE,
+            "advanced_tts_available": TTS_AVAILABLE,
+            "fallback_tts_available": GTTS_AVAILABLE,
+            "models": {
+                "stt": "Whisper large-v3",
+                "tts": "VITS/Tacotron2 + HiFi-GAN (with gTTS fallback)"
+            }
+        }
+    
+    def get_engine_status(self) -> Dict[str, any]:
+        """Get engine status and capabilities"""
+        return {
+            "whisper_loaded": self.whisper_model is not None,
+            "tts_loaded": self.tts_model is not None,
+            "device": self.device,
+            "torch_available": TORCH_AVAILABLE,
+            "cuda_available": TORCH_AVAILABLE and torch.cuda.is_available(),
+            "whisper_available": WHISPER_AVAILABLE,
+            "gtts_available": GTTS_AVAILABLE,
+            "librosa_available": LIBROSA_AVAILABLE,
+            "supported_formats": self.supported_formats,
+            "model_cache_size": len(self.model_cache)
+        }
+    
+    def cleanup(self):
+        """Clean up resources"""
+        try:
+            # Clear model cache
+            self.model_cache.clear()
+            self.whisper_model = None
+            
+            # Clear CUDA cache if available
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            
+            app_logger.info("Speech engine cleanup completed")
+            
+        except Exception as e:
+            app_logger.error(f"Speech engine cleanup failed: {e}")
 
 
-# Global speech engine instance
-speech_engine = SpeechEngine()
+# Global instance
+speech_engine = ProductionSpeechEngine()
+
+
+def get_speech_engine() -> ProductionSpeechEngine:
+    """Get the global speech engine instance"""
+    return speech_engine

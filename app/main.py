@@ -1,6 +1,6 @@
 """
-Main FastAPI application
-Indian Language Localizer Backend
+Main FastAPI application - Indian Language Localizer Backend
+Production-ready AI-powered multilingual translation system
 """
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,12 +8,13 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
 import time
+import os
 from app.core.config import get_settings
 from app.core.db import init_db
 from app.utils.logger import app_logger
 from app.utils.metrics import get_metrics
 from app.utils.performance import perf_monitor, cleanup_resources
-from app.routes import auth, content, translation, speech, feedback
+from app.routes import content, translation, speech, feedback
 
 settings = get_settings()
 
@@ -34,16 +35,17 @@ async def lifespan(app: FastAPI):
         app_logger.error(f"Database initialization error: {e}")
     
     # Create storage directories
-    import os
-    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-    os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
-    os.makedirs("logs", exist_ok=True)
-    os.makedirs("data/vocabs", exist_ok=True)
-    app_logger.info("Storage directories created")
+    storage_dirs = [
+        settings.UPLOAD_DIR,
+        settings.OUTPUT_DIR,
+        "logs",
+        "data/vocabs"
+    ]
     
-    # Pre-load models (optional, can be lazy-loaded)
-    # from app.services.nlp_engine import nlp_engine
-    # nlp_engine.load_model("IndicTrans2-en-indic", "en-indic")
+    for directory in storage_dirs:
+        os.makedirs(directory, exist_ok=True)
+    
+    app_logger.info("Storage directories initialized")
     
     app_logger.info("Application startup complete")
     
@@ -256,14 +258,13 @@ async def performance_metrics():
     }
 
 
-# Include routers
-app.include_router(auth.router)
+# Include routers - No authentication required
 app.include_router(content.router)
 app.include_router(content.upload_router)  # Add simple upload router
 app.include_router(translation.router)
 app.include_router(speech.router)
+app.include_router(feedback.simple_router)  # Add simple feedback router first
 app.include_router(feedback.router)
-app.include_router(feedback.simple_router)  # Add simple feedback router
 
 # Add missing evaluation router (commented due to dependency conflicts)
 # from app.routes import evaluation

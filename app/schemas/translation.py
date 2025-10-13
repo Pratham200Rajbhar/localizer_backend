@@ -45,6 +45,8 @@ class TranslationResponse(BaseModel):
     duration: float
     domain: Optional[str] = None
     translation_id: Optional[int] = None
+    localization_applied: Optional[bool] = False
+    error: Optional[str] = None
 
 
 class BatchTranslationResponse(BaseModel):

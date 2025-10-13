@@ -1,397 +1,404 @@
 """
-Cultural and Domain Localization Service
-Complete implementation with real vocabulary mapping and cultural rules
+Optimized Cultural and Domain Localization Service
+Efficient vocabulary mapping and cultural adaptation for 22 Indian languages
 """
 import json
 import re
-from typing import Dict, Optional, List, Any
+import os
+from typing import Dict, Optional, List, Any, Set
 from pathlib import Path
+from functools import lru_cache
+
+# Core dependencies
 from app.core.config import get_settings, SUPPORTED_LANGUAGES
 from app.utils.logger import app_logger
 
 settings = get_settings()
 
 
-class LocalizationEngine:
-    """Cultural and domain-specific localization with real implementation"""
+class OptimizedLocalizationEngine:
+    """
+    Production-ready localization engine with efficient caching and processing
+    """
     
     def __init__(self):
-        self.vocab_cache = {}
-        self.cultural_rules = {}
-        self.domain_vocabs = {}
+        self.vocab_cache: Dict[str, Dict] = {}
+        self.cultural_rules: Dict[str, Any] = {}
+        self.domain_vocabs: Dict[str, Dict] = {}
+        self.loaded_domains: Set[str] = set()
+        
+        # Initialize core components
         self._initialize_cultural_rules()
-        self._load_domain_vocabularies()
-        app_logger.info("Localization Engine initialized with complete functionality")
+        self._discover_available_domains()
+        
+        app_logger.info("Optimized Localization Engine initialized")
     
     def _initialize_cultural_rules(self):
-        """Initialize cultural adaptation rules"""
+        """Initialize optimized cultural adaptation rules"""
         self.cultural_rules = {
-            # Honorific additions for Indian languages
+            # Common honorifics for professional contexts
             "honorifics": {
-                "hi": {"sir": "साहब", "madam": "मैडम जी", "ji": "जी"},
-                "bn": {"sir": "সাহেব", "madam": "ম্যাডাম", "ji": "জি"},
-                "te": {"sir": "సార్", "madam": "మేడం", "garu": "గారు"},
-                "ta": {"sir": "ஐயா", "madam": "அம்மா", "avargal": "அவர்கள்"},
-                "mr": {"sir": "साहेब", "madam": "मॅडम", "ji": "जी"},
-                "gu": {"sir": "સાહેબ", "madam": "મેડમ", "ji": "જી"},
-                "pa": {"sir": "ਸਾਹਿਬ", "madam": "ਮੈਡਮ", "ji": "ਜੀ"},
-                "kn": {"sir": "ಸರ್", "madam": "ಮೇಡಂ", "avare": "ಅವರೆ"},
-                "ml": {"sir": "സാർ", "madam": "മാഡം", "avar": "അവർ"},
-                "or": {"sir": "ସାର୍", "madam": "ମ୍ୟାଡାମ୍", "nka": "ଙ୍କା"},
-                "as": {"sir": "চাহাব", "madam": "মেডাম", "ji": "জী"},
-                "ur": {"sir": "صاحب", "madam": "میڈم", "ji": "جی"}
+                "hi": {"sir": "साहब", "madam": "मैडम जी", "respect": "जी"},
+                "bn": {"sir": "সাহেব", "madam": "ম্যাডাম", "respect": "জি"},
+                "te": {"sir": "సార్", "madam": "మేడం", "respect": "గారు"},
+                "ta": {"sir": "ஐயா", "madam": "அம்மா", "respect": "அவர்கள்"},
+                "mr": {"sir": "साहेब", "madam": "मॅडम", "respect": "जी"},
+                "gu": {"sir": "સાહેબ", "madam": "મેડમ", "respect": "જી"},
+                "pa": {"sir": "ਸਾਹਿਬ", "madam": "ਮੈਡਮ", "respect": "ਜੀ"},
+                "kn": {"sir": "ಸರ್", "madam": "ಮೇಡಂ", "respect": "ಅವರೆ"},
+                "ml": {"sir": "സാർ", "madam": "മാഡം", "respect": "അവർ"},
+                "or": {"sir": "ସାର୍", "madam": "ମ୍ୟାଡାମ୍", "respect": "ଙ୍କା"},
+                "ur": {"sir": "صاحب", "madam": "میڈم", "respect": "جی"}
             },
             
-            # Cultural phrase adaptations
-            "phrases": {
-                "thank you": {
+            # Essential courtesy phrases
+            "courtesy": {
+                "thank_you": {
                     "hi": "धन्यवाद", "bn": "ধন্যবাদ", "te": "ధన్యవాదాలు",
                     "ta": "நன்றி", "mr": "धन्यवाद", "gu": "આભાર",
-                    "pa": "ਧੰਨਵਾਦ", "kn": "ಧನ್ಯವಾದಗಳು", "ml": "നന്ദി", 
-                    "or": "ଧନ୍ୟବାଦ", "as": "ধন্যবাদ", "ur": "شکریہ"
+                    "pa": "ਧੰਨਵਾਦ", "kn": "ಧನ್ಯವಾದಗಳು", "ml": "നന്ദി",
+                    "or": "ଧନ୍ୟବାଦ", "ur": "شکریہ"
                 },
                 "please": {
                     "hi": "कृपया", "bn": "দয়া করে", "te": "దయచేసి",
                     "ta": "தயவுசெய்து", "mr": "कृपया", "gu": "કૃપા કરીને",
                     "pa": "ਕਿਰਪਾ ਕਰਕੇ", "kn": "ದಯವಿಟ್ಟು", "ml": "ദയവായി",
-                    "or": "ଦୟାକରି", "as": "অনুগ্ৰহ কৰি", "ur": "براہ کرم"
+                    "or": "ଦୟାକରି", "ur": "براہ کرم"
+                }
+            },
+            
+            # Regional variations for common terms
+            "regional_terms": {
+                "water": {
+                    "hi": "पानी", "bn": "জল", "te": "నీరు", "ta": "தண்ணீர்",
+                    "mr": "पाणी", "gu": "પાણી", "pa": "ਪਾਣੀ", "kn": "ನೀರು",
+                    "ml": "വെള്ളം", "or": "ପାଣି", "ur": "پانی"
+                },
+                "food": {
+                    "hi": "खाना", "bn": "খাবার", "te": "ఆహారం", "ta": "உணவு",
+                    "mr": "अन्न", "gu": "ખોરાક", "pa": "ਖਾਣਾ", "kn": "ಆಹಾರ",
+                    "ml": "ഭക്ഷണം", "or": "ଖାଦ୍ୟ", "ur": "کھانا"
                 }
             }
         }
     
-    def _load_domain_vocabularies(self):
-        """Load all domain vocabularies and create defaults if missing"""
+    def _discover_available_domains(self):
+        """Discover available domain vocabulary files"""
         vocab_dir = Path("data/vocabs")
-        
-        if not vocab_dir.exists():
-            vocab_dir.mkdir(parents=True, exist_ok=True)
-            self._create_default_vocabularies(vocab_dir)
-        
-        for vocab_file in vocab_dir.glob("*.json"):
-            domain = vocab_file.stem
-            try:
-                self.domain_vocabs[domain] = self.load_domain_vocabulary(domain)
-            except Exception as e:
-                app_logger.error(f"Error loading vocabulary {domain}: {e}")
+        if vocab_dir.exists():
+            for file_path in vocab_dir.glob("*.json"):
+                domain = file_path.stem
+                self.loaded_domains.add(domain)
+                app_logger.debug(f"Discovered domain vocabulary: {domain}")
     
-    def _create_default_vocabularies(self, vocab_dir: Path):
-        """Create comprehensive default domain vocabularies"""
-        
-        # Healthcare vocabulary
-        healthcare_vocab = {
-            "en": {
-                "doctor": {"hi": "डॉक्टर", "bn": "ডাক্তার", "te": "వైద్యుడు", "ta": "மருத்துவர்", "mr": "डॉक्टर", "gu": "ડૉક્ટર"},
-                "hospital": {"hi": "अस्पताल", "bn": "হাসপাতাল", "te": "ఆసుపత్రి", "ta": "மருத்துவமனை", "mr": "रुग्णालय", "gu": "હોસ્પિટલ"},
-                "medicine": {"hi": "दवा", "bn": "ওষুধ", "te": "మందు", "ta": "மருந்து", "mr": "औषध", "gu": "દવા"},
-                "patient": {"hi": "मरीज़", "bn": "রোগী", "te": "రోగి", "ta": "நோயாளி", "mr": "रुग्ण", "gu": "દર્દી"},
-                "nurse": {"hi": "नर्स", "bn": "নার্স", "te": "నర్సు", "ta": "செவிலியர்", "mr": "परिचारिका", "gu": "નર્સ"},
-                "surgery": {"hi": "शल्य चिकित्सा", "bn": "অস্ত্রোপচার", "te": "శస్త్రచికిత్స", "ta": "அறுவை சிகிச்சை", "mr": "शस्त्रक्रिया", "gu": "સર્જરી"},
-                "prescription": {"hi": "नुस्खा", "bn": "প্রেসক্রিপশন", "te": "ప్రిస্క్రిప్షన్", "ta": "மருந்து சீட்டு", "mr": "औषधपत्र", "gu": "પ્રિસ્ક્રિપ્શન"}
-            }
-        }
-        
-        # Construction vocabulary  
-        construction_vocab = {
-            "en": {
-                "electrician": {"hi": "विद्युत तकनीशियन", "bn": "ইলেকট্রিশিয়ান", "te": "విద్యుత్ కార్మికుడు", "ta": "மின்சாரத் தொழிலாளி"},
-                "safety gear": {"hi": "सुरक्षा उपकरण", "bn": "নিরাপত্তা সরঞ্জাম", "te": "భద్రతా పరికరాలు", "ta": "பாதுகாப்பு கருவிகள்"},
-                "construction": {"hi": "निर्माण", "bn": "নির্মাণ", "te": "నిర్మాణం", "ta": "கட்டுமானம்"},
-                "engineer": {"hi": "इंजीनियर", "bn": "ইঞ্জিনিয়ার", "te": "ఇంజనీర్", "ta": "பொறியாளர்"},
-                "contractor": {"hi": "ठेकेदार", "bn": "ঠিকাদার", "te": "కాంట్రాక్టర్", "ta": "ஒப்பந்தக்காரர்"},
-                "cement": {"hi": "सीमेंट", "bn": "সিমেন্ট", "te": "సిమెంట్", "ta": "சிமெண்ட்"}
-            }
-        }
-        
-        # Education vocabulary
-        education_vocab = {
-            "en": {
-                "teacher": {"hi": "शिक्षक", "bn": "শিক্ষক", "te": "గురువు", "ta": "ஆசிரியர்"},
-                "student": {"hi": "छात्र", "bn": "ছাত্র", "te": "విద్యార్థి", "ta": "மாணவர்"},
-                "school": {"hi": "स्कूल", "bn": "স্কুল", "te": "పాఠశాల", "ta": "பள்ளி"},
-                "education": {"hi": "शिक्षा", "bn": "শিক্ষা", "te": "విద్య", "ta": "கல்வி"},
-                "examination": {"hi": "परीक्षा", "bn": "পরীক্ষা", "te": "పరీక్ష", "ta": "தேர்வு"}
-            }
-        }
-        
-        # Save vocabularies
-        vocabs = {
-            "healthcare": healthcare_vocab,
-            "construction": construction_vocab,
-            "education": education_vocab
-        }
-        
-        for domain, vocab in vocabs.items():
-            vocab_file = vocab_dir / f"{domain}.json"
-            with open(vocab_file, 'w', encoding='utf-8') as f:
-                json.dump(vocab, f, ensure_ascii=False, indent=2)
-            app_logger.info(f"Created default vocabulary: {domain}")
-
-    def load_domain_vocabulary(self, domain: str) -> Dict:
-        """Load domain-specific vocabulary"""
-        if domain in self.vocab_cache:
-            return self.vocab_cache[domain]
+    def _load_domain_vocabulary(self, domain: str) -> bool:
+        """Load vocabulary for specific domain with error handling"""
+        if domain in self.domain_vocabs:
+            return True
         
         vocab_path = Path(f"data/vocabs/{domain}.json")
         
         if not vocab_path.exists():
-            app_logger.warning(f"Domain vocabulary not found: {domain}")
-            return {}
+            app_logger.warning(f"Vocabulary file not found for domain: {domain}")
+            # Create basic fallback vocabulary
+            self.domain_vocabs[domain] = self._create_fallback_vocabulary(domain)
+            return True
         
         try:
-            with open(vocab_path, "r", encoding="utf-8") as f:
-                vocab = json.load(f)
+            with open(vocab_path, 'r', encoding='utf-8') as f:
+                vocab_data = json.load(f)
             
-            self.vocab_cache[domain] = vocab
-            app_logger.info(f"Loaded domain vocabulary: {domain}")
-            return vocab
+            # Validate vocabulary structure
+            if self._validate_vocabulary(vocab_data, domain):
+                self.domain_vocabs[domain] = vocab_data
+                app_logger.info(f"Loaded vocabulary for domain: {domain}")
+                return True
+            else:
+                app_logger.warning(f"Invalid vocabulary structure for domain: {domain}")
+                self.domain_vocabs[domain] = self._create_fallback_vocabulary(domain)
+                return True
         
         except Exception as e:
-            app_logger.error(f"Error loading vocabulary for {domain}: {e}")
-            return {}
+            app_logger.error(f"Failed to load vocabulary for {domain}: {e}")
+            self.domain_vocabs[domain] = self._create_fallback_vocabulary(domain)
+            return False
     
-    def apply_domain_terms(
-        self,
-        text: str,
-        domain: str,
-        target_language: str
-    ) -> str:
-        """
-        Apply domain-specific terminology
-        
-        Args:
-            text: Translated text
-            domain: Domain name
-            target_language: Target language code
-        
-        Returns:
-            Text with domain-specific terms applied
-        """
-        vocab = self.load_domain_vocabulary(domain)
-        
-        if not vocab or target_language not in vocab:
-            return text
-        
-        terms = vocab[target_language]
-        
-        # Replace generic terms with domain-specific terms
-        modified_text = text
-        for generic, specific in terms.items():
-            # Simple replacement (in production, use more sophisticated NLP)
-            modified_text = modified_text.replace(generic, specific)
-        
-        return modified_text
+    def _validate_vocabulary(self, vocab_data: Dict, domain: str) -> bool:
+        """Validate vocabulary file structure"""
+        try:
+            # Check for required structure
+            if not isinstance(vocab_data, dict):
+                return False
+            
+            # Support two structures:
+            # 1. Direct language mapping: {"hi": {"term": "translation"}, ...}
+            # 2. Terms section: {"terms": {"term": {"hi": "translation"}}}
+            
+            if "terms" in vocab_data:
+                # New structure with terms section
+                terms = vocab_data["terms"]
+                if not isinstance(terms, dict):
+                    return False
+                
+                # Validate at least some supported languages are present
+                sample_term = next(iter(terms.values())) if terms else {}
+                supported_langs = set(sample_term.keys()) if isinstance(sample_term, dict) else set()
+            else:
+                # Direct structure - language codes as top-level keys
+                supported_langs = set(vocab_data.keys())
+            
+            if not supported_langs.intersection(SUPPORTED_LANGUAGES.keys()):
+                app_logger.warning(f"Domain {domain} vocabulary has no supported languages")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            app_logger.error(f"Vocabulary validation failed for {domain}: {e}")
+            return False
     
-    def apply_cultural_adaptation(
-        self,
-        text: str,
-        target_language: str,
-        context: Optional[Dict] = None
-    ) -> str:
+    def _create_fallback_vocabulary(self, domain: str) -> Dict[str, Any]:
+        """Create basic fallback vocabulary for unsupported domains"""
+        
+        # Common fallback terms based on domain
+        fallback_terms = {
+            "healthcare": {
+                "doctor": {"hi": "डॉक्टर", "bn": "ডাক্তার", "te": "వైద్యుడు", "ta": "மருத்துவர்"},
+                "medicine": {"hi": "दवा", "bn": "ওষুধ", "te": "మందు", "ta": "மருந்து"},
+                "hospital": {"hi": "अस्पताल", "bn": "হাসপাতাল", "te": "ఆసుపత్రి", "ta": "மருத்துவமனை"}
+            },
+            "construction": {
+                "building": {"hi": "भवन", "bn": "ভবন", "te": "భవనం", "ta": "கட்டிடம்"},
+                "worker": {"hi": "मजदूर", "bn": "শ্রমিক", "te": "కార్మికుడు", "ta": "தொழிலாளி"},
+                "safety": {"hi": "सुरक्षा", "bn": "নিরাপত্তা", "te": "భద్రత", "ta": "பாதுகாப்பு"}
+            },
+            "education": {
+                "student": {"hi": "छात्र", "bn": "ছাত্র", "te": "విద్యార్థి", "ta": "மாணவர்"},
+                "teacher": {"hi": "शिक्षक", "bn": "শিক্ষক", "te": "ఉపాధ్యాయుడు", "ta": "ஆசிரியர்"},
+                "school": {"hi": "स्कूल", "bn": "স্কুল", "te": "పాఠశాల", "ta": "பள்ளி"}
+            }
+        }
+        
+        domain_terms = fallback_terms.get(domain, {
+            "general": {"hi": "सामान्य", "bn": "সাধারণ", "te": "సాధారణ", "ta": "பொதுவான"}
+        })
+        
+        return {
+            "domain": domain,
+            "terms": domain_terms,
+            "generated": True,
+            "languages": list(SUPPORTED_LANGUAGES.keys())
+        }
+    
+    @lru_cache(maxsize=1000)
+    def apply_cultural_adaptation(self, text: str, target_language: str, domain: Optional[str] = None) -> str:
         """
-        Apply cultural adaptations
+        Apply cultural adaptations with efficient caching
         
         Args:
             text: Text to adapt
-            target_language: Target language code
-            context: Optional context information
-        
+            target_language: Target language code  
+            domain: Optional domain context
+            
         Returns:
             Culturally adapted text
         """
-        # Cultural adaptation rules
-        # In production, this would be much more sophisticated
-        
-        cultural_mappings = {
-            "hi": {
-                # Hindi cultural adaptations
-                "hello": "नमस्ते",
-                "thank you": "धन्यवाद",
-                "please": "कृपया"
-            },
-            "ta": {
-                # Tamil cultural adaptations
-                "hello": "வணக்கம்",
-                "thank you": "நன்றி"
-            },
-            "bn": {
-                # Bengali cultural adaptations
-                "hello": "নমস্কার",
-                "thank you": "ধন্যবাদ"
-            }
-        }
-        
-        if target_language not in cultural_mappings:
+        if target_language not in SUPPORTED_LANGUAGES:
             return text
         
-        adapted_text = text
-        for english, local in cultural_mappings[target_language].items():
-            adapted_text = adapted_text.replace(english, local)
-        
-        return adapted_text
+        try:
+            adapted_text = text
+            
+            # Apply honorific rules
+            adapted_text = self._apply_honorifics(adapted_text, target_language)
+            
+            # Apply courtesy phrase adaptations
+            adapted_text = self._apply_courtesy_phrases(adapted_text, target_language)
+            
+            # Apply regional term preferences
+            adapted_text = self._apply_regional_terms(adapted_text, target_language)
+            
+            # Apply domain-specific adaptations if domain provided
+            if domain:
+                adapted_text = self._apply_domain_adaptations(adapted_text, target_language, domain)
+            
+            return adapted_text.strip()
+            
+        except Exception as e:
+            app_logger.error(f"Cultural adaptation failed for {target_language}: {e}")
+            return text
     
-    def localize(
-        self,
-        text: str,
-        language: str,
-        domain: Optional[str] = None
-    ) -> Dict[str, Any]:
+    def _apply_honorifics(self, text: str, target_lang: str) -> str:
+        """Apply honorific adaptations"""
+        if target_lang not in self.cultural_rules["honorifics"]:
+            return text
+        
+        honorifics = self.cultural_rules["honorifics"][target_lang]
+        adapted = text
+        
+        # Simple replacements for common honorifics
+        for english, local in honorifics.items():
+            # Case-insensitive replacement
+            adapted = re.sub(rf'\\b{re.escape(english)}\\b', local, adapted, flags=re.IGNORECASE)
+        
+        return adapted
+    
+    def _apply_courtesy_phrases(self, text: str, target_lang: str) -> str:
+        """Apply courtesy phrase adaptations"""
+        adapted = text
+        
+        for phrase_key, translations in self.cultural_rules["courtesy"].items():
+            if target_lang in translations:
+                english_phrases = {
+                    "thank_you": ["thank you", "thanks"],
+                    "please": ["please"]
+                }
+                
+                for eng_phrase in english_phrases.get(phrase_key, []):
+                    pattern = rf'\\b{re.escape(eng_phrase)}\\b'
+                    adapted = re.sub(pattern, translations[target_lang], adapted, flags=re.IGNORECASE)
+        
+        return adapted
+    
+    def _apply_regional_terms(self, text: str, target_lang: str) -> str:
+        """Apply regional term preferences"""
+        adapted = text
+        
+        for english_term, translations in self.cultural_rules["regional_terms"].items():
+            if target_lang in translations:
+                pattern = rf'\\b{re.escape(english_term)}\\b'
+                adapted = re.sub(pattern, translations[target_lang], adapted, flags=re.IGNORECASE)
+        
+        return adapted
+    
+    def _apply_domain_adaptations(self, text: str, target_lang: str, domain: str) -> str:
+        """Apply domain-specific vocabulary adaptations"""
+        
+        # Load domain vocabulary if not already loaded
+        if not self._load_domain_vocabulary(domain):
+            return text
+        
+        vocab = self.domain_vocabs.get(domain, {})
+        terms = vocab.get("terms", {})
+        
+        adapted = text
+        
+        # Apply domain-specific term replacements
+        for english_term, translations in terms.items():
+            if isinstance(translations, dict) and target_lang in translations:
+                local_term = translations[target_lang]
+                # Case-insensitive word boundary replacement
+                pattern = rf'\\b{re.escape(english_term)}\\b'
+                adapted = re.sub(pattern, local_term, adapted, flags=re.IGNORECASE)
+        
+        return adapted
+    
+    def localize_content(self, content: str, source_lang: str, target_lang: str, 
+                        domain: Optional[str] = None, context: Optional[Dict] = None) -> Dict[str, Any]:
         """
-        Apply domain-specific and cultural localization
+        Complete localization with cultural and domain adaptations
         
         Args:
-            text: Text to localize
-            language: Target language code (using 'language' to match call in translation.py)
-            domain: Domain for vocabulary mapping
-        
-        Returns: 
-            Dict with localized text and changes applied
+            content: Content to localize
+            source_lang: Source language code
+            target_lang: Target language code
+            domain: Optional domain context
+            context: Optional additional context
+            
+        Returns:
+            Localization result with metadata
         """
-        if language not in SUPPORTED_LANGUAGES:
-            raise ValueError(f"Language {language} not supported")
-        
-        localized_text = text
-        changes_applied = []
-        
-        # Apply domain vocabulary mapping
-        if domain and domain in self.domain_vocabs:
-            localized_text, domain_changes = self._apply_domain_vocabulary(
-                localized_text, language, domain
-            )
-            changes_applied.extend(domain_changes)
-        
-        # Apply cultural adaptations
-        localized_text, cultural_changes = self._apply_cultural_rules(
-            localized_text, language
-        )
-        changes_applied.extend(cultural_changes)
-        
-        # Apply regional formatting
-        localized_text, format_changes = self._apply_regional_formatting(
-            localized_text, language
-        )
-        changes_applied.extend(format_changes)
-        
-        app_logger.info(f"Localization applied for {language}, {len(changes_applied)} changes")
-        
-        return {
-            "localized_text": localized_text,
-            "original_text": text,
-            "language": language,
-            "domain": domain,
-            "changes_applied": changes_applied
-        }
-    
-    def _apply_domain_vocabulary(
-        self, text: str, language: str, domain: str
-    ) -> tuple[str, List[str]]:
-        """Apply domain-specific vocabulary mapping"""
-        changes = []
-        localized_text = text
-        
-        if domain not in self.domain_vocabs:
-            return localized_text, changes
-        
-        domain_vocab = self.domain_vocabs[domain]
-        
-        # Apply English to target language mappings
-        if "en" in domain_vocab:
-            for en_term, translations in domain_vocab["en"].items():
-                if language in translations:
-                    target_term = translations[language]
-                    
-                    # Case-insensitive replacement with word boundaries
-                    pattern = re.compile(r'\b' + re.escape(en_term) + r'\b', re.IGNORECASE)
-                    if pattern.search(localized_text):
-                        localized_text = pattern.sub(target_term, localized_text)
-                        changes.append(f"Domain vocab: '{en_term}' -> '{target_term}'")
-        
-        return localized_text, changes
-    
-    def _apply_cultural_rules(self, text: str, language: str) -> tuple[str, List[str]]:
-        """Apply cultural adaptation rules"""
-        changes = []
-        localized_text = text
-        
-        # Apply honorifics
-        if language in self.cultural_rules["honorifics"]:
-            honorifics = self.cultural_rules["honorifics"][language]
-            for en_term, local_term in honorifics.items():
-                pattern = re.compile(r'\b' + re.escape(en_term) + r'\b', re.IGNORECASE)
-                if pattern.search(localized_text):
-                    localized_text = pattern.sub(local_term, localized_text)
-                    changes.append(f"Honorific: '{en_term}' -> '{local_term}'")
-        
-        # Apply cultural phrases
-        for en_phrase, translations in self.cultural_rules["phrases"].items():
-            if language in translations:
-                local_phrase = translations[language]
-                pattern = re.compile(re.escape(en_phrase), re.IGNORECASE)
-                if pattern.search(localized_text):
-                    localized_text = pattern.sub(local_phrase, localized_text)
-                    changes.append(f"Cultural phrase: '{en_phrase}' -> '{local_phrase}'")
-        
-        return localized_text, changes
-    
-    def _apply_regional_formatting(self, text: str, language: str) -> tuple[str, List[str]]:
-        """Apply regional formatting (numbers, dates, etc.)"""
-        changes = []
-        localized_text = text
-        
-        # Apply number formatting based on Indian number system
-        # Convert Western numbers to Devanagari numerals for Hindi, Marathi, etc.
-        devanagari_langs = ["hi", "mr", "sa", "mai", "doi", "kok"]
-        
-        if language in devanagari_langs:
-            # Convert digits to Devanagari numerals
-            western_to_devanagari = {
-                '0': '०', '1': '१', '2': '२', '3': '३', '4': '४',
-                '5': '५', '6': '६', '7': '७', '8': '८', '9': '९'
+        try:
+            if target_lang not in SUPPORTED_LANGUAGES and target_lang != "en":
+                raise ValueError(f"Target language '{target_lang}' not supported")
+            
+            # Apply cultural adaptations
+            localized_content = self.apply_cultural_adaptation(content, target_lang, domain)
+            
+            # Calculate adaptation metrics
+            changes_made = content != localized_content
+            adaptation_score = self._calculate_adaptation_score(content, localized_content)
+            
+            result = {
+                "original_content": content,
+                "localized_content": localized_content,
+                "source_language": source_lang,
+                "target_language": target_lang,
+                "domain": domain,
+                "changes_made": changes_made,
+                "adaptation_score": adaptation_score,
+                "cultural_rules_applied": changes_made,
+                "context": context or {}
             }
             
-            for western, devanagari in western_to_devanagari.items():
-                if western in localized_text:
-                    localized_text = localized_text.replace(western, devanagari)
-                    changes.append(f"Number format: '{western}' -> '{devanagari}'")
+            app_logger.debug(f"Localization completed: {source_lang} -> {target_lang}, domain: {domain}")
+            
+            return result
+            
+        except Exception as e:
+            app_logger.error(f"Localization failed: {e}")
+            raise RuntimeError(f"Localization failed: {str(e)}") from e
+    
+    def _calculate_adaptation_score(self, original: str, adapted: str) -> float:
+        """Calculate a simple adaptation score based on changes made"""
+        if original == adapted:
+            return 0.0
         
-        return localized_text, changes
+        # Simple metric: ratio of changed characters
+        import difflib
+        matcher = difflib.SequenceMatcher(None, original, adapted)
+        similarity = matcher.ratio()
+        
+        # Adaptation score is the inverse of similarity (more changes = higher score)
+        adaptation_score = min(1.0, (1.0 - similarity) * 2.0)  # Scale to 0-1
+        
+        return round(adaptation_score, 3)
     
     def get_available_domains(self) -> List[str]:
-        """Get list of available domains"""
-        return list(self.domain_vocabs.keys())
+        """Get list of available domain vocabularies"""
+        return sorted(list(self.loaded_domains))
     
-    def create_domain_vocabulary(
-        self,
-        domain: str,
-        vocabulary: Dict
-    ) -> bool:
-        """
-        Create new domain vocabulary file
+    def get_domain_info(self, domain: str) -> Optional[Dict[str, Any]]:
+        """Get information about a specific domain"""
+        if domain not in self.loaded_domains:
+            return None
         
-        Args:
-            domain: Domain name
-            vocabulary: Vocabulary dictionary
+        if not self._load_domain_vocabulary(domain):
+            return None
         
-        Returns:
-            Success status
-        """
-        vocab_dir = Path("/app/data/vocabs")
-        vocab_dir.mkdir(parents=True, exist_ok=True)
+        vocab = self.domain_vocabs.get(domain, {})
         
-        vocab_path = vocab_dir / f"{domain}.json"
-        
-        try:
-            with open(vocab_path, "w", encoding="utf-8") as f:
-                json.dump(vocabulary, f, indent=2, ensure_ascii=False)
-            
-            app_logger.info(f"Created domain vocabulary: {domain}")
-            return True
-        
-        except Exception as e:
-            app_logger.error(f"Error creating vocabulary for {domain}: {e}")
-            return False
+        return {
+            "domain": domain,
+            "total_terms": len(vocab.get("terms", {})),
+            "supported_languages": len(vocab.get("languages", [])),
+            "is_generated": vocab.get("generated", False),
+            "vocabulary_loaded": True
+        }
+    
+    def get_localization_stats(self) -> Dict[str, Any]:
+        """Get localization engine statistics"""
+        return {
+            "loaded_domains": len(self.loaded_domains),
+            "available_domains": list(self.loaded_domains),
+            "supported_languages": len(SUPPORTED_LANGUAGES),
+            "cultural_rules_count": sum(len(rules) for rules in self.cultural_rules.values()),
+            "cache_size": len(self.vocab_cache),
+            "total_vocabularies": len(self.domain_vocabs)
+        }
+    
+    def clear_cache(self):
+        """Clear localization caches"""
+        self.vocab_cache.clear()
+        # Clear LRU cache
+        self.apply_cultural_adaptation.cache_clear()
+        app_logger.info("Localization cache cleared")
 
 
-# Global localization engine instance
-localization_engine = LocalizationEngine()
-localization_service = localization_engine  # Alias for backward compatibility
+# Global instance
+localization_engine = OptimizedLocalizationEngine()
 
+
+def get_localization_engine() -> OptimizedLocalizationEngine:
+    """Get the global localization engine instance"""
+    return localization_engine

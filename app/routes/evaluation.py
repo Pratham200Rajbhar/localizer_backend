@@ -24,7 +24,6 @@ except (ImportError, RuntimeError, Exception) as e:
     print(f"Warning: COMET not available due to: {e}")
 
 from app.core.db import get_db
-from app.core.security import get_current_user
 from app.models.user import User
 from app.models.evaluation import Evaluation
 from app.models.translation import Translation
@@ -37,7 +36,7 @@ router = APIRouter(prefix="/evaluate", tags=["Evaluation"])
 @router.post("/run", response_model=EvaluationResponse)
 async def run_evaluation(
     evaluation_request: EvaluationCreate,
-    current_user: User = Depends(get_current_user),
+    # current_user removed
     db: Session = Depends(get_db)
 ):
     """
@@ -80,7 +79,7 @@ async def run_evaluation(
             bleu_score=bleu_score,
             comet_score=comet_score,
             reference_text=evaluation_request.reference_text,
-            evaluator_id=current_user.id
+            evaluator_id=None  # current_user.id removed
         )
         
         db.add(evaluation)

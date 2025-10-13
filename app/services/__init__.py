@@ -1,8 +1,8 @@
 """AI and service modules"""
-from .nlp_engine import NLPEngine
-from .speech_engine import SpeechEngine
+from .nlp_engine import AdvancedNLPEngine, get_nlp_engine
+from .speech_engine import ProductionSpeechEngine
 
 # Global instances
-nlp_engine = NLPEngine()
-speech_engine = SpeechEngine()
+nlp_engine = AdvancedNLPEngine()
+speech_engine = ProductionSpeechEngine()
 

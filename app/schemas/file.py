@@ -24,7 +24,6 @@ class FileResponse(BaseModel):
     size: Optional[int]
     domain: Optional[str]
     source_language: Optional[str]
-    uploader_id: int
     created_at: datetime
 
 

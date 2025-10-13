@@ -9,9 +9,7 @@ from fastapi.responses import FileResponse
 from typing import Optional
 from sqlalchemy.orm import Session
 from app.core.db import get_db
-from app.core.security import get_current_user
 from app.core.config import SUPPORTED_LANGUAGES, get_settings
-from app.models.user import User
 from app.schemas.speech import STTRequest, TTSRequest, STTResponse, TTSResponse
 from app.services import speech_engine
 from app.utils.file_manager import file_manager
@@ -28,8 +26,7 @@ MAX_AUDIO_SIZE = 100 * 1024 * 1024  # 100 MB
 @router.post("/stt", response_model=STTResponse)
 async def speech_to_text(
     file: UploadFile = File(...),
-    language: Optional[str] = Form(None),
-    current_user: User = Depends(get_current_user)
+    language: Optional[str] = Form(None)
 ):
     """
     Convert speech to text (Speech-to-Text) - Direct processing
@@ -77,7 +74,7 @@ async def speech_to_text(
                 raise ValueError("Audio sample rate too low (minimum 8kHz required)")
         
         # Perform STT directly
-        result = speech_engine.speech_to_text(
+        result = await speech_engine.speech_to_text(
             audio_path=temp_audio_path,
             language=language
         )
@@ -85,16 +82,19 @@ async def speech_to_text(
         # Clean up temporary file
         os.unlink(temp_audio_path)
         
-        app_logger.info(f"STT completed: {result['language_detected']} detected")
+        app_logger.info(f"STT completed: {result['language']} detected")
+        
+        # Get language name from SUPPORTED_LANGUAGES or default
+        language_name = SUPPORTED_LANGUAGES.get(result["language"], result["language"].title())
         
         return STTResponse(
-            transcript=result["transcript"],
-            language_detected=result["language_detected"],
-            language_name=result["language_name"],
+            transcript=result["text"],
+            language_detected=result["language"], 
+            language_name=language_name,
             confidence=result["confidence"],
             duration=result["duration"],
             segments=result["segments"],
-            model_used=result["model_used"]
+            model_used="whisper-large-v3"
         )
     
     except ValueError as e:
@@ -115,16 +115,17 @@ async def speech_to_text(
         except:
             pass
         app_logger.error(f"STT error: {e}")
+        import traceback
+        app_logger.error(f"STT traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Speech-to-text processing failed"
+            detail=f"Speech-to-text processing failed: {str(e)}"
         )
 
 
 @router.post("/tts", response_model=TTSResponse)
 async def text_to_speech(
-    request: TTSRequest,
-    current_user: User = Depends(get_current_user)
+    request: TTSRequest
 ):
     """
     Convert text to speech (Text-to-Speech) - Direct processing
@@ -150,23 +151,24 @@ async def text_to_speech(
         app_logger.info(f"Processing TTS for language: {request.language}")
         
         # Perform TTS directly
-        result = speech_engine.text_to_speech(
+        result = await speech_engine.text_to_speech(
             text=request.text,
             language=request.language,
-            output_path=output_path,
-            voice=request.voice,
-            speed=request.speed
+            output_path=output_path
         )
         
         app_logger.info(f"TTS completed: {result['language']} audio generated")
         
+        # Get language name
+        language_name = SUPPORTED_LANGUAGES.get(result["language"], result["language"].title())
+        
         return TTSResponse(
-            audio_path=result["audio_path"],
+            audio_path=result["output_path"],
             language=result["language"],
-            language_name=result["language_name"],
-            duration=result["duration"],
+            language_name=language_name,
+            duration=result["generation_time"],
             generation_time=result["generation_time"],
-            format=result["format"]
+            format="mp3"
         )
     
     except ValueError as e:
@@ -177,16 +179,17 @@ async def text_to_speech(
         )
     except Exception as e:
         app_logger.error(f"TTS error: {e}")
+        import traceback
+        app_logger.error(f"TTS traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Text-to-speech processing failed"
+            detail=f"Text-to-speech processing failed: {str(e)}"
         )
 
 
 @router.get("/tts/download/{filename}")
 async def download_audio(
-    filename: str,
-    current_user: User = Depends(get_current_user)
+    filename: str
 ):
     """
     Download generated audio file
