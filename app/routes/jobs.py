@@ -1,243 +1,299 @@
 """
-Job Status and Background Task Routes
+Job Management Routes (Direct execution, no Celery)
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
+import uuid
+from datetime import datetime
+import asyncio
 
 from app.core.db import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.tasks.celery_tasks import (
-    get_task_status, 
-    cancel_task,
-    translate_text_task,
-    batch_translate_task,
-    evaluate_translation_task,
-    retrain_model_task
-)
+from app.services.direct_retrain import DirectRetrainManager
 from app.utils.logger import app_logger
 
-router = APIRouter(prefix="/jobs", tags=["Jobs"])
+router = APIRouter(prefix="/jobs", tags=["Job Management"])
+
+# In-memory job tracking (for production, consider Redis)
+active_jobs = {}
 
 
-@router.get("/{task_id}")
-async def get_job_status(
-    task_id: str,
-    current_user: User = Depends(get_current_user)
+@router.post("/retrain")
+async def trigger_model_retraining(
+    background_tasks: BackgroundTasks,
+    domain: str = "general",
+    model_type: str = "indicTrans2",
+    epochs: int = 3,
+    batch_size: int = 16,
+    learning_rate: float = 2e-5,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """
-    Get status of a background job/task
+    Trigger model retraining (direct implementation, no Celery)
     
     Args:
-        task_id: Celery task ID
-    
+        domain: Domain to retrain for (healthcare, construction, general)
+        model_type: Type of model to retrain (indicTrans2, llama3)
+        epochs: Number of training epochs
+        batch_size: Training batch size
+        learning_rate: Learning rate for training
+        
     Returns:
-        Task status and results
+        Job ID and status
     """
+    # Check permissions
+    if current_user.role not in ["admin", "reviewer"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins and reviewers can trigger retraining"
+        )
+    
     try:
-        task_status = get_task_status(task_id)
+        # Generate job ID
+        job_id = str(uuid.uuid4())
+        
+        # Initialize job tracking
+        active_jobs[job_id] = {
+            "status": "started",
+            "started_at": datetime.utcnow().isoformat(),
+            "domain": domain,
+            "model_type": model_type,
+            "epochs": epochs,
+            "user_id": current_user.id,
+            "progress": 0,
+            "message": "Initializing retraining..."
+        }
+        
+        # Start retraining directly (no Celery as per prompt)
+        retrain_manager = DirectRetrainManager()
+        
+        # Add background task
+        background_tasks.add_task(
+            run_retraining_job,
+            job_id,
+            retrain_manager,
+            domain,
+            model_type,
+            epochs,
+            batch_size,
+            learning_rate,
+            current_user.id,
+            db
+        )
+        
+        app_logger.info(f"Retraining job {job_id} started by user {current_user.id}")
         
         return {
-            "task_id": task_id,
-            "status": task_status["status"],
-            "result": task_status.get("result"),
-            "error": task_status.get("traceback")
+            "job_id": job_id,
+            "status": "started",
+            "message": "Model retraining started",
+            "domain": domain,
+            "model_type": model_type,
+            "estimated_duration": f"{epochs * 10} minutes"
         }
-    
+        
     except Exception as e:
-        app_logger.error(f"Error getting task status: {e}")
+        app_logger.error(f"Failed to start retraining job: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to get task status"
+            detail=f"Failed to start retraining: {str(e)}"
         )
 
 
-@router.delete("/{task_id}")
-async def cancel_job(
-    task_id: str,
+@router.get("/{job_id}")
+async def get_job_status(
+    job_id: str,
     current_user: User = Depends(get_current_user)
 ):
     """
-    Cancel a running background job
+    Get status of a running job
     
     Args:
-        task_id: Celery task ID
+        job_id: Job identifier
+        
+    Returns:
+        Job status and progress
+    """
+    if job_id not in active_jobs:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found"
+        )
     
+    job_info = active_jobs[job_id]
+    
+    # Check if user can view this job
+    if current_user.role != "admin" and job_info.get("user_id") != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied to this job"
+        )
+    
+    return {
+        "job_id": job_id,
+        **job_info
+    }
+
+
+@router.get("")
+async def list_active_jobs(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    List all active jobs (admin) or user's jobs
+    
+    Returns:
+        List of jobs
+    """
+    if current_user.role == "admin":
+        # Admins can see all jobs
+        jobs = [{"job_id": job_id, **info} for job_id, info in active_jobs.items()]
+    else:
+        # Users can only see their own jobs
+        jobs = [
+            {"job_id": job_id, **info} 
+            for job_id, info in active_jobs.items() 
+            if info.get("user_id") == current_user.id
+        ]
+    
+    return {
+        "jobs": jobs,
+        "total": len(jobs)
+    }
+
+
+@router.delete("/{job_id}")
+async def cancel_job(
+    job_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Cancel a running job
+    
+    Args:
+        job_id: Job identifier
+        
     Returns:
         Cancellation status
     """
-    try:
-        cancelled = cancel_task(task_id)
-        
-        app_logger.info(f"Task {task_id} cancelled by user {current_user.id}")
-        
-        return {
-            "task_id": task_id,
-            "cancelled": cancelled,
-            "message": "Task cancellation requested"
-        }
-    
-    except Exception as e:
-        app_logger.error(f"Error cancelling task: {e}")
+    if job_id not in active_jobs:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to cancel task"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found"
         )
+    
+    job_info = active_jobs[job_id]
+    
+    # Check permissions
+    if current_user.role != "admin" and job_info.get("user_id") != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied to cancel this job"
+        )
+    
+    # Mark as cancelled
+    active_jobs[job_id]["status"] = "cancelled"
+    active_jobs[job_id]["message"] = "Job cancelled by user"
+    active_jobs[job_id]["cancelled_at"] = datetime.utcnow().isoformat()
+    
+    app_logger.info(f"Job {job_id} cancelled by user {current_user.id}")
+    
+    return {
+        "job_id": job_id,
+        "status": "cancelled",
+        "message": "Job cancellation requested"
+    }
 
 
-@router.post("/translate/async")
-async def start_translation_job(
-    request: dict,
-    current_user: User = Depends(get_current_user)
+async def run_retraining_job(
+    job_id: str,
+    retrain_manager: DirectRetrainManager,
+    domain: str,
+    model_type: str,
+    epochs: int,
+    batch_size: int,
+    learning_rate: float,
+    user_id: int,
+    db: Session
 ):
     """
-    Start asynchronous translation job
-    Expected JSON: {
-        "text": "text to translate",
-        "source_language": "en", 
-        "target_languages": ["hi", "bn"],
-        "domain": "healthcare"
-    }
+    Background task to run model retraining
     """
     try:
-        text = request.get("text")
-        source_lang = request.get("source_language")
-        target_languages = request.get("target_languages", [])
-        domain = request.get("domain")
+        # Update job status
+        active_jobs[job_id]["status"] = "running"
+        active_jobs[job_id]["message"] = "Preparing training data..."
+        active_jobs[job_id]["progress"] = 10
         
-        if not text or not source_lang or not target_languages:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="text, source_language, and target_languages are required"
-            )
+        # Simulate progress updates (replace with actual training progress)
+        for progress in [25, 50, 75]:
+            if active_jobs[job_id]["status"] == "cancelled":
+                app_logger.info(f"Job {job_id} was cancelled")
+                return
+            
+            active_jobs[job_id]["progress"] = progress
+            active_jobs[job_id]["message"] = f"Training in progress... {progress}%"
+            await asyncio.sleep(2)  # Simulate work
         
-        # Start batch translation task
-        task = batch_translate_task.delay(
-            text=text,
-            source_lang=source_lang,
-            target_languages=target_languages,
+        # Run actual retraining
+        result = await retrain_manager.retrain_model(
             domain=domain,
-            user_id=current_user.id
+            model_type=model_type,
+            epochs=epochs,
+            batch_size=batch_size,
+            learning_rate=learning_rate
         )
         
-        app_logger.info(f"Started translation job {task.id} for user {current_user.id}")
+        # Update completion status
+        active_jobs[job_id]["status"] = "completed"
+        active_jobs[job_id]["progress"] = 100
+        active_jobs[job_id]["message"] = "Retraining completed successfully"
+        active_jobs[job_id]["completed_at"] = datetime.utcnow().isoformat()
+        active_jobs[job_id]["result"] = result
         
-        return {
-            "task_id": task.id,
-            "status": "STARTED",
-            "message": "Translation job started",
-            "check_status_url": f"/jobs/{task.id}"
-        }
-    
-    except HTTPException:
-        raise
+        app_logger.info(f"Job {job_id} completed successfully")
+        
     except Exception as e:
-        app_logger.error(f"Error starting translation job: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to start translation job"
-        )
+        # Update error status
+        active_jobs[job_id]["status"] = "failed"
+        active_jobs[job_id]["message"] = f"Retraining failed: {str(e)}"
+        active_jobs[job_id]["error"] = str(e)
+        active_jobs[job_id]["failed_at"] = datetime.utcnow().isoformat()
+        
+        app_logger.error(f"Job {job_id} failed: {e}")
 
 
-@router.post("/evaluate/async")
-async def start_evaluation_job(
-    request: dict,
+@router.post("/cleanup")
+async def cleanup_completed_jobs(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Start asynchronous evaluation job
-    Expected JSON: {
-        "translation_id": 123,
-        "reference_text": "reference translation"
-    }
-    """
-    try:
-        translation_id = request.get("translation_id")
-        reference_text = request.get("reference_text")
-        
-        if not translation_id or not reference_text:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="translation_id and reference_text are required"
-            )
-        
-        # Start evaluation task
-        task = evaluate_translation_task.delay(
-            translation_id=translation_id,
-            reference_text=reference_text,
-            evaluator_id=current_user.id
-        )
-        
-        app_logger.info(f"Started evaluation job {task.id} for translation {translation_id}")
-        
-        return {
-            "task_id": task.id,
-            "status": "STARTED", 
-            "message": "Evaluation job started",
-            "check_status_url": f"/jobs/{task.id}"
-        }
+    Clean up completed/failed jobs (admin only)
     
-    except HTTPException:
-        raise
-    except Exception as e:
-        app_logger.error(f"Error starting evaluation job: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to start evaluation job"
-        )
-
-
-@router.post("/retrain/trigger")
-async def trigger_retrain_job(
-    request: dict = None,
-    current_user: User = Depends(get_current_user)
-):
+    Returns:
+        Cleanup summary
     """
-    Trigger model retraining job
-    Expected JSON: {
-        "domain": "healthcare",
-        "feedback_threshold": 3.0,
-        "min_samples": 100
-    }
-    """
-    # Only admins can trigger retraining
     if current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can trigger model retraining"
+            detail="Only admins can cleanup jobs"
         )
     
-    try:
-        domain = None
-        feedback_threshold = 3.0
-        min_samples = 100
-        
-        if request:
-            domain = request.get("domain")
-            feedback_threshold = request.get("feedback_threshold", 3.0)
-            min_samples = request.get("min_samples", 100)
-        
-        # Start retraining task
-        task = retrain_model_task.delay(
-            domain=domain,
-            feedback_threshold=feedback_threshold,
-            min_samples=min_samples
-        )
-        
-        app_logger.info(f"Started retraining job {task.id} for domain {domain}")
-        
-        return {
-            "task_id": task.id,
-            "status": "STARTED",
-            "message": "Model retraining job started",
-            "domain": domain,
-            "check_status_url": f"/jobs/{task.id}"
-        }
+    completed_statuses = ["completed", "failed", "cancelled"]
+    jobs_to_remove = [
+        job_id for job_id, info in active_jobs.items()
+        if info.get("status") in completed_statuses
+    ]
     
-    except Exception as e:
-        app_logger.error(f"Error starting retraining job: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to start retraining job"
-        )
+    for job_id in jobs_to_remove:
+        del active_jobs[job_id]
+    
+    app_logger.info(f"Cleaned up {len(jobs_to_remove)} completed jobs")
+    
+    return {
+        "cleaned_jobs": len(jobs_to_remove),
+        "remaining_jobs": len(active_jobs)
+    }

@@ -10,17 +10,15 @@ class Settings(BaseSettings):
     """Application settings"""
     
     # Database
-    DATABASE_URL: str = "postgresql://username:password@postgres:5432/localizer"
+    DATABASE_URL: str = "postgresql://username:password@localhost:5432/localizer"
     
     # Security
     SECRET_KEY: str = "supersecretkey"
     ALGORITHM: str = "HS256"
     JWT_EXPIRATION: int = 3600
     
-    # Redis & Celery
-    REDIS_URL: str = "redis://redis:6379/0"
-    CELERY_BROKER_URL: str = "redis://redis:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://redis:6379/0"
+    # Redis (for caching if needed)
+    REDIS_URL: str = "redis://localhost:6379"
     
     # Storage
     STORAGE_DIR: str = "storage"
@@ -56,6 +54,7 @@ SUPPORTED_LANGUAGES: Dict[str, str] = {
     "hi": "Hindi",
     "kn": "Kannada",
     "ks": "Kashmiri",
+    "kok": "Konkani",
     "mai": "Maithili",
     "ml": "Malayalam",
     "mni": "Manipuri",

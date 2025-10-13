@@ -7,8 +7,6 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 from app.core.db import get_db
 from app.core.security import (
-    hash_password,
-    verify_password,
     create_access_token,
     get_current_user
 )
@@ -45,19 +43,10 @@ async def register(
             detail="Username already exists"
         )
     
-    # Check if email exists
-    existing_email = db.query(User).filter(User.email == user_data.email).first()
-    if existing_email:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already exists"
-        )
-    
     # Create new user
     new_user = User(
         username=user_data.username,
-        email=user_data.email,
-        password_hash=hash_password(user_data.password),
+        password=user_data.password,  # Plain text as per requirements
         role=user_data.role
     )
     
@@ -81,7 +70,7 @@ async def login(
     # Find user
     user = db.query(User).filter(User.username == form_data.username).first()
     
-    if not user or not verify_password(form_data.password, user.password_hash):
+    if not user or form_data.password != user.password:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",

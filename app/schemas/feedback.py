@@ -8,10 +8,13 @@ from datetime import datetime
 
 class FeedbackCreate(BaseModel):
     """Schema for creating feedback"""
-    translation_id: int
+    translation_id: Optional[int] = Field(None, description="Translation ID if providing feedback on specific translation")
+    file_id: Optional[int] = Field(None, description="File ID if providing feedback on file directly")
     rating: int = Field(..., ge=1, le=5, description="Rating from 1 to 5 stars")
     comments: Optional[str] = Field(None, max_length=2000)
     corrections: Optional[dict] = Field(None, description="JSON with text corrections")
+    
+
 
 
 class FeedbackResponse(BaseModel):

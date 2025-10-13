@@ -110,18 +110,51 @@ async def submit_feedback(
     
     Rating: 1-5 stars
     """
-    # Check translation exists
-    translation = db.query(Translation).filter(Translation.id == feedback_data.translation_id).first()
-    if not translation:
+    # Determine translation_id from either direct ID or file_id
+    translation_id = feedback_data.translation_id
+    
+    if not translation_id and feedback_data.file_id:
+        # Find most recent translation for this file
+        translation = db.query(Translation).filter(Translation.file_id == feedback_data.file_id).first()
+        if translation:
+            translation_id = translation.id
+        else:
+            # Create a placeholder translation record for file-based feedback
+            from app.models.file import File as FileModel
+            file_record = db.query(FileModel).filter(FileModel.id == feedback_data.file_id).first()
+            if not file_record:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="File not found"
+                )
+            # Create placeholder translation for feedback purposes
+            placeholder_translation = Translation(
+                user_id=current_user.id,
+                file_id=feedback_data.file_id,
+                source_language="en",
+                target_language="hi",
+                source_text=f"File: {file_record.filename}",
+                translated_text="[Feedback on file]",
+                model_used="feedback_placeholder",
+                confidence_score=1.0,
+                domain=file_record.domain or "general",
+                duration=0.0
+            )
+            db.add(placeholder_translation)
+            db.commit()
+            db.refresh(placeholder_translation)
+            translation_id = placeholder_translation.id
+    
+    if not translation_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Translation not found"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either translation_id or file_id must be provided"
         )
     
     try:
         # Create feedback
         feedback = Feedback(
-            translation_id=feedback_data.translation_id,
+            translation_id=translation_id,
             user_id=current_user.id,
             rating=feedback_data.rating,
             comments=feedback_data.comments,

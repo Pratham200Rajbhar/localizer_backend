@@ -100,6 +100,10 @@ class NLPEngine:
         self.indic_en_tokenizer = None
         self.fasttext_model = None
         
+        # LLaMA 3 for advanced translation (as per prompt requirements)
+        self.llama_model = None
+        self.llama_tokenizer = None
+        
         app_logger.info(f"NLP Engine initialized on device: {self.device}")
     
     def load_model(self, direction: str = "en-indic"):
@@ -185,6 +189,80 @@ class NLPEngine:
                 except Exception as e:
                     app_logger.error(f"Error loading Indic-EN model: {e}")
                     raise RuntimeError(f"Failed to load Indic-EN translation model: {e}")
+    
+    def load_llama_model(self):
+        """
+        Load LLaMA 3 model for advanced translation capabilities
+        As specified in the master prompt requirements
+        """
+        if self.llama_model is not None:
+            app_logger.info("LLaMA 3 model already loaded")
+            return
+        
+        if not _try_import_transformers():
+            app_logger.error("Transformers library not available. Cannot load LLaMA 3.")
+            raise RuntimeError("Transformers library required for LLaMA 3")
+        
+        # Check cache first
+        cache_key = "LLaMA-3-8B-Instruct"
+        if model_cache:
+            cached_model = model_cache.get_model(cache_key)
+            
+            if cached_model:
+                self.llama_model = cached_model["model"]
+                self.llama_tokenizer = cached_model["tokenizer"]
+                app_logger.info("Loaded LLaMA 3 model from cache")
+                return
+        
+        if memory_monitor:
+            with memory_monitor("LLaMA 3 model loading"):
+                self._load_llama_model(cache_key)
+        else:
+            self._load_llama_model(cache_key)
+    
+    def _load_llama_model(self, cache_key: str):
+        """Internal method to load LLaMA 3 model"""
+        start_time = time.time()
+        app_logger.info("Loading LLaMA 3 model for advanced translation...")
+        
+        try:
+            # Use the model specified in config
+            model_name = settings.TRANSLATION_MODEL  # "meta-llama/Meta-Llama-3-8B-Instruct"
+            
+            # Load tokenizer and model
+            self.llama_tokenizer = AutoTokenizer.from_pretrained(
+                model_name,
+                trust_remote_code=True
+            )
+            
+            # Add padding token if not present
+            if self.llama_tokenizer.pad_token is None:
+                self.llama_tokenizer.pad_token = self.llama_tokenizer.eos_token
+            
+            self.llama_model = AutoModelForSeq2SeqLM.from_pretrained(
+                model_name,
+                trust_remote_code=True,
+                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                device_map="auto" if self.device == "cuda" else None
+            )
+            
+            if self.device != "cuda":
+                self.llama_model = self.llama_model.to(self.device)
+            
+            # Cache the loaded model
+            if model_cache:
+                model_cache.cache_model(cache_key, self.llama_model, self.llama_tokenizer)
+            
+            load_time = time.time() - start_time
+            if metrics:
+                metrics.record_model_load_time("LLaMA-3", load_time)
+            
+            app_logger.info(f"LLaMA 3 model loaded successfully in {load_time:.2f}s")
+            
+        except Exception as e:
+            app_logger.error(f"Error loading LLaMA 3 model: {e}")
+            app_logger.warning("Falling back to IndicTrans2 only")
+            # Don't raise exception, allow fallback to IndicTrans2
     
     def load_fasttext_model(self):
         """Load FastText model for language detection"""

@@ -54,10 +54,11 @@ comet_score_avg = Gauge(
     ["language_pair"]
 )
 
-celery_queue_size = Gauge(
-    "celery_queue_size",
-    "Celery queue size",
-    ["queue_name"]
+# Direct job tracking metrics
+active_jobs_count = Gauge(
+    "active_jobs_count",
+    "Number of active background jobs",
+    ["job_type", "status"]
 )
 
 model_load_time = Histogram(
