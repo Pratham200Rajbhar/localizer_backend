@@ -69,3 +69,11 @@ celerybeat.pid
 .cache/
 .transformers_cache/
 
+# Test files and directories
+test_*.json
+test_*.txt
+test_src/
+TESTING_*.md
+*_test.py
+temp_*.json
+
