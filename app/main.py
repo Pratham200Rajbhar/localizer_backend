@@ -258,6 +258,80 @@ async def performance_metrics():
     }
 
 
+# System information endpoint
+@app.get("/system/info", tags=["Monitoring"])
+async def system_info():
+    """Get comprehensive system information"""
+    try:
+        import psutil
+        import torch
+        from pathlib import Path
+        
+        # GPU Information
+        gpu_info = {}
+        if torch.cuda.is_available():
+            gpu_info = {
+                "available": True,
+                "device_count": torch.cuda.device_count(),
+                "current_device": torch.cuda.current_device(),
+                "device_name": torch.cuda.get_device_name(0) if torch.cuda.device_count() > 0 else "Unknown",
+                "memory_allocated_gb": f"{torch.cuda.memory_allocated() / 1024**3:.2f}" if torch.cuda.device_count() > 0 else "0",
+                "memory_reserved_gb": f"{torch.cuda.memory_reserved() / 1024**3:.2f}" if torch.cuda.device_count() > 0 else "0"
+            }
+        else:
+            gpu_info = {"available": False, "reason": "CUDA not available"}
+        
+        # Storage Information
+        storage_info = {}
+        storage_paths = ["storage/uploads", "storage/outputs", "logs"]
+        for path_str in storage_paths:
+            path = Path(path_str)
+            if path.exists():
+                try:
+                    total_size = sum(f.stat().st_size for f in path.rglob('*') if f.is_file())
+                    file_count = len([f for f in path.rglob('*') if f.is_file()])
+                    storage_info[path_str] = {
+                        "size_mb": f"{total_size / 1024**2:.2f}",
+                        "file_count": file_count,
+                        "exists": True
+                    }
+                except Exception:
+                    storage_info[path_str] = {"exists": True, "error": "Cannot calculate size"}
+            else:
+                storage_info[path_str] = {"exists": False}
+        
+        # System Resources
+        memory = psutil.virtual_memory()
+        
+        return {
+            "system": {
+                "cpu_count": psutil.cpu_count(),
+                "cpu_percent": psutil.cpu_percent(interval=0.1),
+                "memory": {
+                    "total_gb": f"{memory.total / 1024**3:.2f}",
+                    "available_gb": f"{memory.available / 1024**3:.2f}",
+                    "used_percent": f"{memory.percent}%"
+                }
+            },
+            "gpu": gpu_info,
+            "storage": storage_info,
+            "environment": {
+                "python_version": f"{__import__('sys').version_info.major}.{__import__('sys').version_info.minor}.{__import__('sys').version_info.micro}",
+                "pytorch_version": torch.__version__,
+                "cuda_version": torch.version.cuda if torch.cuda.is_available() else "N/A",
+                "fastapi_environment": settings.ENVIRONMENT
+            },
+            "supported_languages_count": 22
+        }
+        
+    except Exception as e:
+        app_logger.error(f"System info error: {e}")
+        return {
+            "error": "Failed to retrieve system information",
+            "details": str(e)
+        }
+
+
 # Include routers - No authentication required
 app.include_router(content.router)
 app.include_router(content.upload_router)  # Add simple upload router

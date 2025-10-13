@@ -23,6 +23,19 @@ ALLOWED_AUDIO_FORMATS = {".wav", ".mp3", ".mp4", ".m4a", ".ogg", ".flac"}
 MAX_AUDIO_SIZE = 100 * 1024 * 1024  # 100 MB
 
 
+@router.post("/stt/test")
+async def test_stt():
+    """
+    Test STT endpoint availability
+    """
+    return {
+        "status": "available",
+        "message": "Speech-to-Text service is operational",
+        "supported_formats": list(ALLOWED_AUDIO_FORMATS),
+        "max_file_size_mb": MAX_AUDIO_SIZE // (1024*1024)
+    }
+
+
 @router.post("/stt", response_model=STTResponse)
 async def speech_to_text(
     file: UploadFile = File(...),

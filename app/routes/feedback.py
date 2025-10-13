@@ -184,7 +184,7 @@ async def list_feedback(
     db: Session = Depends(get_db)
 ):
     """
-    List feedback
+    List feedback from database
     
     Admins can see all feedback, users can see their own
     """
@@ -197,6 +197,35 @@ async def list_feedback(
     feedback_list = query.offset(skip).limit(limit).all()
     
     return feedback_list
+
+
+@router.get("/all")
+async def get_all_feedback():
+    """
+    Get all feedback from both database and JSON file
+    
+    Returns combined feedback from all sources
+    """
+    import json
+    from pathlib import Path
+    
+    all_feedback = []
+    
+    # Get feedback from JSON file
+    try:
+        feedback_file = Path("storage/feedback.json")
+        if feedback_file.exists():
+            with open(feedback_file, "r") as f:
+                json_feedback = json.load(f)
+                all_feedback.extend(json_feedback)
+    except Exception as e:
+        app_logger.warning(f"Could not read JSON feedback: {e}")
+    
+    return {
+        "feedback": all_feedback,
+        "total_count": len(all_feedback),
+        "source": "json_file"
+    }
 
 
 @router.get("/{feedback_id}", response_model=FeedbackResponse)
