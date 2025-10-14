@@ -320,18 +320,43 @@ class AdvancedNLPEngine:
                 "confidence": 0.0
             }
         
-        # Try langdetect first
+        # First, try script-based detection for Indian languages (more accurate for Indian languages)
+        script_detected = self._detect_script_based_language(text)
+        if script_detected != "unknown":
+            app_logger.info(f"Script-based detection: {script_detected}")
+            return {
+                "detected_language": script_detected,
+                "language_name": SUPPORTED_LANGUAGES.get(script_detected, script_detected),
+                "confidence": 0.9  # High confidence for script-based detection
+            }
+        
+        # Try langdetect for English and other non-Indian languages
         if LANGDETECT_AVAILABLE:
             try:
                 detected = detect(text)
+                app_logger.info(f"langdetect detected: {detected}")
+                
+                # Handle English detection
+                if detected == "en":
+                    return {
+                        "detected_language": "en",
+                        "language_name": "English",
+                        "confidence": 0.9
+                    }
+                
+                # Handle other supported languages (non-Indian)
                 if detected in SUPPORTED_LANGUAGES:
                     return {
                         "detected_language": detected,
                         "language_name": SUPPORTED_LANGUAGES[detected],
                         "confidence": 0.9
                     }
-            except LangDetectException:
-                pass
+                
+                # Handle other languages that might be detected
+                app_logger.warning(f"langdetect detected unsupported language: {detected}")
+                
+            except LangDetectException as e:
+                app_logger.warning(f"langdetect failed: {e}")
         
         # Fallback: Use IndicBERT for classification (if loaded)
         if "indic_bert" in self.loaded_models:
@@ -340,11 +365,19 @@ class AdvancedNLPEngine:
             except Exception as e:
                 app_logger.warning(f"IndicBERT detection failed: {e}")
         
-        # Default fallback
+        # Try to detect English using simple heuristics
+        if self._is_likely_english(text):
+            return {
+                "detected_language": "en",
+                "language_name": "English",
+                "confidence": 0.7
+            }
+        
+        # Final fallback to Hindi only if no other method worked
         return {
             "detected_language": "hi",  # Default to Hindi
             "language_name": "Hindi",
-            "confidence": 0.5
+            "confidence": 0.3  # Lower confidence for fallback
         }
 
     def _detect_with_indic_bert(self, text: str) -> Dict[str, Union[str, float]]:
@@ -365,8 +398,215 @@ class AdvancedNLPEngine:
             "language_name": "Hindi",
             "confidence": 0.8
         }
+    
+    def _is_likely_english(self, text: str) -> bool:
+        """
+        Simple heuristic to detect if text is likely English
+        """
+        if not text:
+            return False
+        
+        # Count ASCII characters (English uses ASCII)
+        ascii_chars = sum(1 for c in text if ord(c) < 128)
+        total_chars = len(text)
+        
+        # If more than 80% are ASCII characters, likely English
+        ascii_ratio = ascii_chars / total_chars if total_chars > 0 else 0
+        
+        # Check for common English words
+        english_words = {
+            'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
+            'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did',
+            'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those',
+            'a', 'an', 'some', 'any', 'all', 'each', 'every', 'no', 'not', 'very', 'much', 'many',
+            'system', 'can', 'translate', 'documents', 'across', 'languages', 'accuracy', 'powered',
+            'multilingual', 'content', 'localization', 'engine', 'welcome', 'ai'
+        }
+        
+        text_lower = text.lower()
+        word_count = len(text_lower.split())
+        english_word_count = sum(1 for word in text_lower.split() if word in english_words)
+        
+        # If more than 30% of words are common English words, likely English
+        english_word_ratio = english_word_count / word_count if word_count > 0 else 0
+        
+        # Combine ASCII ratio and English word ratio
+        is_english = ascii_ratio > 0.8 and english_word_ratio > 0.3
+        
+        app_logger.debug(f"English detection: ascii_ratio={ascii_ratio:.2f}, english_word_ratio={english_word_ratio:.2f}, is_english={is_english}")
+        
+        return is_english
+    
+    def _detect_script_based_language(self, text: str) -> str:
+        """
+        Enhanced script-based language detection for Indian languages
+        """
+        if not text:
+            return "unknown"
+        
+        # Script ranges for different languages
+        script_ranges = {
+            # Devanagari script (Hindi, Marathi, Nepali, Sanskrit, Bodo, Dogri, Maithili, Konkani, Santali)
+            "devanagari": {
+                "range": (0x0900, 0x097F),
+                "languages": ["hi", "mr", "ne", "sa", "brx", "doi", "mai", "kok", "sat"]
+            },
+            # Bengali script (Bengali, Assamese, Manipuri)
+            "bengali": {
+                "range": (0x0980, 0x09FF),
+                "languages": ["bn", "as", "mni"]
+            },
+            # Tamil script
+            "tamil": {
+                "range": (0x0B80, 0x0BFF),
+                "languages": ["ta"]
+            },
+            # Telugu script
+            "telugu": {
+                "range": (0x0C00, 0x0C7F),
+                "languages": ["te"]
+            },
+            # Gujarati script
+            "gujarati": {
+                "range": (0x0A80, 0x0AFF),
+                "languages": ["gu"]
+            },
+            # Gurmukhi script (Punjabi)
+            "gurmukhi": {
+                "range": (0x0A00, 0x0A7F),
+                "languages": ["pa"]
+            },
+            # Kannada script
+            "kannada": {
+                "range": (0x0C80, 0x0CFF),
+                "languages": ["kn"]
+            },
+            # Malayalam script
+            "malayalam": {
+                "range": (0x0D00, 0x0D7F),
+                "languages": ["ml"]
+            },
+            # Odia script
+            "odia": {
+                "range": (0x0B00, 0x0B7F),
+                "languages": ["or"]
+            },
+            # Arabic script (Urdu, Kashmiri, Sindhi)
+            "arabic": {
+                "range": (0x0600, 0x06FF),
+                "languages": ["ur", "ks", "sd"]
+            }
+        }
+        
+        # Count characters in each script
+        script_counts = {}
+        for script_name, script_info in script_ranges.items():
+            start, end = script_info["range"]
+            count = sum(1 for c in text if start <= ord(c) <= end)
+            script_counts[script_name] = count
+        
+        # Find the dominant script
+        dominant_script = max(script_counts.items(), key=lambda x: x[1])
+        script_name, count = dominant_script
+        
+        if count == 0:
+            return "unknown"
+        
+        # If we have a dominant script, use language-specific patterns to distinguish
+        if script_name in script_ranges:
+            possible_languages = script_ranges[script_name]["languages"]
+            
+            # Use language-specific patterns for disambiguation
+            detected_lang = self._disambiguate_script_languages(text, script_name, possible_languages)
+            return detected_lang
+        
+        return "unknown"
+    
+    def _disambiguate_script_languages(self, text: str, script_name: str, possible_languages: list) -> str:
+        """
+        Disambiguate between languages that use the same script
+        """
+        if len(possible_languages) == 1:
+            return possible_languages[0]
+        
+        # Language-specific patterns and words
+        language_patterns = {
+            "hi": ["है", "हैं", "हूं", "हो", "कैसे", "क्या", "कहाँ", "कब", "क्यों", "मैं", "तुम", "आप"],
+            "mr": ["आहे", "आहोत", "आहो", "कसे", "काय", "कुठे", "कधी", "का", "मी", "तू", "तुम्ही"],
+            "ne": ["छु", "छौं", "छ", "कसरी", "के", "कहाँ", "कहिले", "किन", "म", "तपाईं", "तिमी"],
+            "sa": ["अस्ति", "सन्ति", "अस्मि", "भवान्", "कथं", "किम्", "कुत्र", "कदा", "किमर्थम्", "अहम्", "त्वम्", "भवान्"],
+            "brx": ["आसो", "आसोनि", "कसे", "मा", "कुंदा", "मानो", "आं", "नों", "बिसोर", "बांगो", "आजि"],
+            "doi": ["हां", "हो", "है", "कैसे", "क्या", "कहाँ", "कब", "क्यों", "मैं", "तुसी", "तुहाडे", "डोगरी"],
+            "mai": ["छी", "छथि", "कहाँ", "का", "कहिले", "किन", "हम", "अहाँ", "तोहर", "मैथिली", "बिहार"],
+            "kok": ["आसां", "आसात", "कशें", "काय", "कुडे", "कदी", "का", "हांव", "तुमी", "तुमचे", "कोंकणी"],
+            "sat": ["आसो", "आसोनि", "कसे", "मा", "कुंदा", "मानो", "आं", "नों", "बिसोर", "संताली", "झारखंड"],
+            "bn": ["আছি", "আছেন", "আছো", "কেমন", "কী", "কোথায়", "কখন", "কেন", "আমি", "তুমি", "আপনি"],
+            "as": ["আছোঁ", "আছে", "আছা", "কেনেকৈ", "কি", "ক'ত", "কেতিয়া", "কিয়", "মই", "তুমি", "আপুনি"],
+            "mni": ["ঈ", "ঈগা", "ঈ", "কদাৱা", "কি", "ক'ত", "কেতিয়া", "কিয়", "ঈ", "নুংগাই", "নুংগাইদা"],
+            "ur": ["ہوں", "ہیں", "ہو", "کیسے", "کیا", "کہاں", "کب", "کیوں", "میں", "تم", "آپ"],
+            "ks": ["چھو", "چھو", "چھو", "کیہہ", "کیا", "کہاں", "کب", "کیوں", "میں", "تہِ", "تہِ"],
+            "sd": ["آهيان", "آهيو", "آهيان", "ڪيئن", "ڪهڙو", "ڪٿي", "ڪڏهن", "ڪيئن", "مان", "توهان", "توهان"]
+        }
+        
+        # Score each possible language based on pattern matches
+        language_scores = {}
+        for lang in possible_languages:
+            if lang in language_patterns:
+                patterns = language_patterns[lang]
+                score = 0
+                for pattern in patterns:
+                    if pattern in text:
+                        # Give higher weight to more distinctive patterns
+                        if len(pattern) > 3:  # Longer patterns are more distinctive
+                            score += 2
+                        else:
+                            score += 1
+                language_scores[lang] = score
+        
+        # Return the language with the highest score, or default to first if tied
+        if language_scores:
+            best_lang = max(language_scores.items(), key=lambda x: x[1])
+            if best_lang[1] > 0:  # Only return if we found at least one pattern
+                # For languages with identical scores, use additional heuristics
+                if best_lang[1] > 1:  # Only if we have multiple pattern matches
+                    return best_lang[0]
+                else:
+                    # For single pattern matches, check for more specific patterns
+                    return self._refine_single_match(text, possible_languages, language_patterns)
+        
+        # Default fallback based on script
+        script_defaults = {
+            "devanagari": "hi",  # Default to Hindi for Devanagari
+            "bengali": "bn",     # Default to Bengali for Bengali script
+            "arabic": "ur"       # Default to Urdu for Arabic script
+        }
+        
+        return script_defaults.get(script_name, possible_languages[0])
+    
+    def _refine_single_match(self, text: str, possible_languages: list, language_patterns: dict) -> str:
+        """
+        Refine language detection when we have single pattern matches
+        """
+        # For very similar languages, use more specific patterns
+        specific_patterns = {
+            "brx": ["बांगो", "आजि", "बोडो", "असम"],
+            "sat": ["संताली", "झारखंड", "संथाल", "ओडिशा"],
+            "doi": ["डोगरी", "जम्मू", "कश्मीर"],
+            "mai": ["मैथिली", "बिहार", "नेपाल"],
+            "kok": ["कोंकणी", "गोवा", "कर्नाटक"]
+        }
+        
+        # Check for specific patterns first
+        for lang in possible_languages:
+            if lang in specific_patterns:
+                for pattern in specific_patterns[lang]:
+                    if pattern in text:
+                        return lang
+        
+        # If no specific patterns found, return the first language
+        return possible_languages[0]
 
-    def translate_with_indic_trans2(
+    async def translate_with_indic_trans2(
         self, 
         text: str, 
         source_lang: str, 
@@ -543,7 +783,7 @@ class AdvancedNLPEngine:
             app_logger.error(f"IndicTrans2 translation completely failed: {e}")
             return self._emergency_translate(text, source_lang, target_lang)
 
-    def translate_with_nllb(
+    async def translate_with_nllb(
         self, 
         text: str, 
         source_lang: str, 
@@ -764,7 +1004,7 @@ class AdvancedNLPEngine:
             app_logger.error(f"LLaMA 3 enhancement failed: {e}")
             raise
 
-    def translate(
+    async def translate(
         self,
         text: str,
         source_language: str,
@@ -821,7 +1061,7 @@ class AdvancedNLPEngine:
                 app_logger.info(f"=== TRANSLATION REQUEST: {source_language} -> {target_lang} ===")
                 app_logger.info(f"Source text: '{text}'")
                 
-                translation_result = self._execute_robust_translation(
+                translation_result = await self._execute_robust_translation(
                     text, source_language, target_lang, domain
                 )
                 
@@ -907,7 +1147,7 @@ class AdvancedNLPEngine:
             "models_used": self._get_models_used(results) + (["LLaMA-3"] if use_llama_enhancement else [])
         }
     
-    def _execute_robust_translation(
+    async def _execute_robust_translation(
         self, 
         text: str, 
         source_lang: str, 
@@ -936,7 +1176,7 @@ class AdvancedNLPEngine:
                 # Strategy 1: English ↔ Indian - IndicTrans2 first
                 app_logger.info(f"Using IndicTrans2 for {source_lang}->{target_lang}")
                 try:
-                    translation_result = self.translate_with_indic_trans2(text, source_lang, target_lang)
+                    translation_result = await self.translate_with_indic_trans2(text, source_lang, target_lang)
                     
                     # Check if IndicTrans2 can handle this pair
                     if translation_result is None:
@@ -958,7 +1198,7 @@ class AdvancedNLPEngine:
                 if "IndicTrans2" in attempted_models or "IndicTrans2-Failed" in attempted_models:
                     try:
                         app_logger.info(f"IndicTrans2 fallback: Using NLLB for {source_lang}->{target_lang}")
-                        translation_result = self.translate_with_nllb(text, source_lang, target_lang)
+                        translation_result = await self.translate_with_nllb(text, source_lang, target_lang)
                         attempted_models.append("NLLB")
                         
                         if (translation_result and 
@@ -977,7 +1217,7 @@ class AdvancedNLPEngine:
                 try:
                     # Step 1: Source Indian → English
                     app_logger.info(f"Bridge Step 1: {source_lang} -> en")
-                    bridge_result_1 = self.translate_with_indic_trans2(text, source_lang, "en")
+                    bridge_result_1 = await self.translate_with_indic_trans2(text, source_lang, "en")
                     
                     if (bridge_result_1 and 
                         bridge_result_1.get("translated_text") and 
@@ -989,7 +1229,7 @@ class AdvancedNLPEngine:
                         
                         # Step 2: English → Target Indian  
                         app_logger.info(f"Bridge Step 2: en -> {target_lang}")
-                        bridge_result_2 = self.translate_with_indic_trans2(english_text, "en", target_lang)
+                        bridge_result_2 = await self.translate_with_indic_trans2(english_text, "en", target_lang)
                         
                         if (bridge_result_2 and 
                             bridge_result_2.get("translated_text") and

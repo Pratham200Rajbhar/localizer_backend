@@ -630,7 +630,7 @@ async def _process_document_job(file_path: str, target_lang: str, domain: str, j
     try:
         # Translate text
         app_logger.info(f"Translating text to {target_lang}...")
-        translation_result = nlp_engine.translate(
+        translation_result = await nlp_engine.translate(
             text=text_content,
             source_language="auto",
             target_languages=[target_lang],
@@ -679,7 +679,7 @@ async def _process_audio_job(file_path: str, target_lang: str, domain: str, job_
     )
     
     # Translation
-    translation_result = nlp_engine.translate(
+    translation_result = await nlp_engine.translate(
         text=stt_result["text"],
         source_language=stt_result["language"],
         target_languages=[target_lang],
@@ -702,7 +702,7 @@ async def _process_audio_job(file_path: str, target_lang: str, domain: str, job_
     os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
     
     import shutil
-    shutil.copy2(tts_result["audio_path"], output_path)
+    shutil.copy2(tts_result["output_path"], output_path)
     
     return {
         "success": True,
@@ -736,7 +736,7 @@ async def _process_video_job(file_path: str, target_lang: str, domain: str, job_
     translated_segments = []
     for segment in stt_result["segments"]:
         if segment["text"].strip():
-            translation_result = nlp_engine.translate(
+            translation_result = await nlp_engine.translate(
                 text=segment["text"].strip(),
                 source_language=stt_result["language"],
                 target_languages=[target_lang],

@@ -23,12 +23,10 @@ class STTResponse(BaseModel):
     model_config = {"protected_namespaces": ()}
     
     transcript: str
-    language_detected: str
-    language_name: str
+    language: str
     confidence: float
-    duration: float
-    segments: list
-    model_used: str
+    processing_time: float
+    audio_duration: float
 
 
 class TTSRequest(BaseModel):
@@ -48,10 +46,9 @@ class TTSRequest(BaseModel):
 
 class TTSResponse(BaseModel):
     """Schema for direct TTS response"""
-    audio_path: str
-    language: str
-    language_name: str
+    status: str
+    output_file: str
     duration: float
-    generation_time: float
-    format: str
+    language: str
+    processing_time: float
 

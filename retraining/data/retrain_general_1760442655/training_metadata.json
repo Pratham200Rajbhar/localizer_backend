@@ -1,0 +1,29 @@
+{
+  "domain": "general",
+  "languages": [
+    "as",
+    "bn",
+    "brx",
+    "doi",
+    "gu",
+    "hi",
+    "kn",
+    "ks",
+    "kok",
+    "mai",
+    "ml",
+    "mni",
+    "mr",
+    "ne",
+    "or",
+    "pa",
+    "sa",
+    "sat",
+    "sd",
+    "ta",
+    "te",
+    "ur"
+  ],
+  "data_path": "retraining\\data\\retrain_general_1760442655",
+  "created_at": 1760442655.3932042
+}

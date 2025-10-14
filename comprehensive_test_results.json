@@ -1,0 +1,809 @@
+{
+  "en": {
+    "total": 4,
+    "correct": 2,
+    "accuracy": 50.0,
+    "results": [
+      {
+        "text": "Welcome to the AI-powered mult...",
+        "expected": "en",
+        "detected": "en",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "This system can translate docu...",
+        "expected": "en",
+        "detected": "ERROR",
+        "confidence": 0.0,
+        "correct": false,
+        "error": "HTTPConnectionPool(host='localhost', port=8000): Read timed out. (read timeout=10)"
+      },
+      {
+        "text": "Hello, how are you today? I ho...",
+        "expected": "en",
+        "detected": "ERROR",
+        "confidence": 0.0,
+        "correct": false,
+        "error": "HTTPConnectionPool(host='localhost', port=8000): Read timed out. (read timeout=10)"
+      },
+      {
+        "text": "The weather is nice today. Let...",
+        "expected": "en",
+        "detected": "en",
+        "confidence": 0.9,
+        "correct": true
+      }
+    ]
+  },
+  "hi": {
+    "total": 4,
+    "correct": 4,
+    "accuracy": 100.0,
+    "results": [
+      {
+        "text": "नमस्ते, आप कैसे हैं? मैं ठीक ह...",
+        "expected": "hi",
+        "detected": "hi",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "यह एक बहुभाषी सामग्री स्थानीयक...",
+        "expected": "hi",
+        "detected": "hi",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "आज मौसम बहुत अच्छा है। चलिए पा...",
+        "expected": "hi",
+        "detected": "hi",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "कृपया मुझे मदद करें। मुझे समझ ...",
+        "expected": "hi",
+        "detected": "hi",
+        "confidence": 0.9,
+        "correct": true
+      }
+    ]
+  },
+  "bn": {
+    "total": 4,
+    "correct": 4,
+    "accuracy": 100.0,
+    "results": [
+      {
+        "text": "আমি ভালো আছি, ধন্যবাদ।",
+        "expected": "bn",
+        "detected": "bn",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "এটি একটি বহুভাষিক কন্টেন্ট লোক...",
+        "expected": "bn",
+        "detected": "bn",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "আজ আবহাওয়া খুব ভালো। চলুন পার...",
+        "expected": "bn",
+        "detected": "bn",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "দয়া করে আমাকে সাহায্য করুন। আ...",
+        "expected": "bn",
+        "detected": "bn",
+        "confidence": 0.9,
+        "correct": true
+      }
+    ]
+  },
+  "ta": {
+    "total": 4,
+    "correct": 4,
+    "accuracy": 100.0,
+    "results": [
+      {
+        "text": "வணக்கம், நீங்கள் எப்படி இருக்க...",
+        "expected": "ta",
+        "detected": "ta",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "இது ஒரு பல்மொழி உள்ளடக்கம் உள்...",
+        "expected": "ta",
+        "detected": "ta",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "இன்று வானிலை மிகவும் நன்றாக உள...",
+        "expected": "ta",
+        "detected": "ta",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "தயவுசெய்து எனக்கு உதவுங்கள்। எ...",
+        "expected": "ta",
+        "detected": "ta",
+        "confidence": 0.9,
+        "correct": true
+      }
+    ]
+  },
+  "te": {
+    "total": 4,
+    "correct": 4,
+    "accuracy": 100.0,
+    "results": [
+      {
+        "text": "హలో, మీరు ఎలా ఉన్నారు? నేను బా...",
+        "expected": "te",
+        "detected": "te",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "ఇది ఒక బహుభాషా కంటెంట్ లోకలైజే...",
+        "expected": "te",
+        "detected": "te",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "ఈ రోజు వాతావరణం చాలా బాగుంది। ...",
+        "expected": "te",
+        "detected": "te",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "దయచేసి నాకు సహాయం చేయండి। నాకు...",
+        "expected": "te",
+        "detected": "te",
+        "confidence": 0.9,
+        "correct": true
+      }
+    ]
+  },
+  "gu": {
+    "total": 4,
+    "correct": 4,
+    "accuracy": 100.0,
+    "results": [
+      {
+        "text": "હેલો, તમે કેમ છો? હું બરાબર છુ...",
+        "expected": "gu",
+        "detected": "gu",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "આ એક બહુભાષી કન્ટેન્ટ લોકલાઇઝે...",
+        "expected": "gu",
+        "detected": "gu",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "આજે હવામાન ખૂબ સારું છે। ચાલો ...",
+        "expected": "gu",
+        "detected": "gu",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "કૃપા કરીને મને મદદ કરો। મને સમ...",
+        "expected": "gu",
+        "detected": "gu",
+        "confidence": 0.9,
+        "correct": true
+      }
+    ]
+  },
+  "mr": {
+    "total": 4,
+    "correct": 1,
+    "accuracy": 25.0,
+    "results": [
+      {
+        "text": "हॅलो, तुम्ही कसे आहात? मी ठीक ...",
+        "expected": "mr",
+        "detected": "mr",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "हे एक बहुभाषी सामग्री स्थानीयक...",
+        "expected": "mr",
+        "detected": "hi",
+        "confidence": 0.9,
+        "correct": false
+      },
+      {
+        "text": "आज हवामान खूप छान आहे। चला पार...",
+        "expected": "mr",
+        "detected": "ne",
+        "confidence": 0.9,
+        "correct": false
+      },
+      {
+        "text": "कृपया मला मदत करा। मला समजत ना...",
+        "expected": "mr",
+        "detected": "hi",
+        "confidence": 0.9,
+        "correct": false
+      }
+    ]
+  },
+  "pa": {
+    "total": 4,
+    "correct": 4,
+    "accuracy": 100.0,
+    "results": [
+      {
+        "text": "ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਤੁਸੀਂ ਕਿਵੇਂ ਹੋ? ...",
+        "expected": "pa",
+        "detected": "pa",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "ਇਹ ਇੱਕ ਬਹੁਭਾਸ਼ੀ ਸਮਗਰੀ ਲੋਕਲਾਈਜੇ...",
+        "expected": "pa",
+        "detected": "pa",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "ਅੱਜ ਮੌਸਮ ਬਹੁਤ ਵਧੀਆ ਹੈ। ਚਲੋ ਪਾਰ...",
+        "expected": "pa",
+        "detected": "pa",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "ਕਿਰਪਾ ਕਰਕੇ ਮੇਰੀ ਮਦਦ ਕਰੋ। ਮੈਨੂੰ...",
+        "expected": "pa",
+        "detected": "pa",
+        "confidence": 0.9,
+        "correct": true
+      }
+    ]
+  },
+  "kn": {
+    "total": 4,
+    "correct": 4,
+    "accuracy": 100.0,
+    "results": [
+      {
+        "text": "ನಮಸ್ಕಾರ, ನೀವು ಹೇಗಿದ್ದೀರಿ? ನಾನು...",
+        "expected": "kn",
+        "detected": "kn",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "ಇದು ಒಂದು ಬಹುಭಾಷಾ ವಿಷಯ ಸ್ಥಳೀಕರಣ...",
+        "expected": "kn",
+        "detected": "kn",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "ಇಂದು ಹವಾಮಾನ ತುಂಬಾ ಚೆನ್ನಾಗಿದೆ। ...",
+        "expected": "kn",
+        "detected": "kn",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "ದಯವಿಟ್ಟು ನನಗೆ ಸಹಾಯ ಮಾಡಿ। ನನಗೆ ...",
+        "expected": "kn",
+        "detected": "kn",
+        "confidence": 0.9,
+        "correct": true
+      }
+    ]
+  },
+  "ml": {
+    "total": 4,
+    "correct": 4,
+    "accuracy": 100.0,
+    "results": [
+      {
+        "text": "നമസ്കാരം, നിങ്ങൾ എങ്ങനെയുണ്ട്?...",
+        "expected": "ml",
+        "detected": "ml",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "ഇത് ഒരു ബഹുഭാഷാ ഉള്ളടക്ക ലോക്ക...",
+        "expected": "ml",
+        "detected": "ml",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "ഇന്ന് കാലാവസ്ഥ വളരെ നല്ലതാണ്। ...",
+        "expected": "ml",
+        "detected": "ml",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "ദയവായി എന്നെ സഹായിക്കുക। എനിക്...",
+        "expected": "ml",
+        "detected": "ml",
+        "confidence": 0.9,
+        "correct": true
+      }
+    ]
+  },
+  "or": {
+    "total": 4,
+    "correct": 4,
+    "accuracy": 100.0,
+    "results": [
+      {
+        "text": "ନମସ୍କାର, ଆପଣ କିପରି ଅଛନ୍ତି? ମୁଁ...",
+        "expected": "or",
+        "detected": "or",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "ଏହା ଏକ ବହୁଭାଷା ବିଷୟବସ୍ତୁ ସ୍ଥାନ...",
+        "expected": "or",
+        "detected": "or",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "ଆଜି ପାଣିପାଗ ବହୁତ ଭଲ। ଚାଲନ୍ତୁ ପ...",
+        "expected": "or",
+        "detected": "or",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "ଦୟାକରି ମୋତେ ସାହାଯ୍ୟ କରନ୍ତୁ। ମୋ...",
+        "expected": "or",
+        "detected": "or",
+        "confidence": 0.9,
+        "correct": true
+      }
+    ]
+  },
+  "as": {
+    "total": 4,
+    "correct": 1,
+    "accuracy": 25.0,
+    "results": [
+      {
+        "text": "নমস্কাৰ, আপুনি কেনেকৈ আছে? মই ...",
+        "expected": "as",
+        "detected": "as",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "এইটো এটা বহুভাষিক বিষয়বস্তু স...",
+        "expected": "as",
+        "detected": "bn",
+        "confidence": 0.9,
+        "correct": false
+      },
+      {
+        "text": "আজি বতৰ বৰ ভাল। আহক পাৰ্কত খোজ...",
+        "expected": "as",
+        "detected": "bn",
+        "confidence": 0.9,
+        "correct": false
+      },
+      {
+        "text": "অনুগ্ৰহ কৰি মোক সহায় কৰক। মোৰ...",
+        "expected": "as",
+        "detected": "bn",
+        "confidence": 0.9,
+        "correct": false
+      }
+    ]
+  },
+  "ur": {
+    "total": 4,
+    "correct": 4,
+    "accuracy": 100.0,
+    "results": [
+      {
+        "text": "السلام علیکم، آپ کیسے ہیں؟ میں...",
+        "expected": "ur",
+        "detected": "ur",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "یہ ایک کثیر لسانی مواد مقامی ک...",
+        "expected": "ur",
+        "detected": "ur",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "آج موسم بہت اچھا ہے۔ چلیں پارک...",
+        "expected": "ur",
+        "detected": "ur",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "براہ کرم میری مدد کریں۔ مجھے س...",
+        "expected": "ur",
+        "detected": "ur",
+        "confidence": 0.9,
+        "correct": true
+      }
+    ]
+  },
+  "ne": {
+    "total": 4,
+    "correct": 3,
+    "accuracy": 75.0,
+    "results": [
+      {
+        "text": "नमस्ते, तपाईं कसरी हुनुहुन्छ? ...",
+        "expected": "ne",
+        "detected": "ne",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "यो एक बहुभाषी सामग्री स्थानीयक...",
+        "expected": "ne",
+        "detected": "hi",
+        "confidence": 0.9,
+        "correct": false
+      },
+      {
+        "text": "आज मौसम धेरै राम्रो छ। पार्कमा...",
+        "expected": "ne",
+        "detected": "ne",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "कृपया मलाई मद्दत गर्नुहोस्। मल...",
+        "expected": "ne",
+        "detected": "ne",
+        "confidence": 0.9,
+        "correct": true
+      }
+    ]
+  },
+  "sa": {
+    "total": 4,
+    "correct": 3,
+    "accuracy": 75.0,
+    "results": [
+      {
+        "text": "नमस्ते, भवान् कथं वर्तते? अहं ...",
+        "expected": "sa",
+        "detected": "sa",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "एतत् बहुभाषिकं विषयस्थानीयकरणय...",
+        "expected": "sa",
+        "detected": "sa",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "अद्य वातावरणं बहु सुन्दरम् अस्...",
+        "expected": "sa",
+        "detected": "sa",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "कृपया मां साहाय्यं कुर्वन्तु। ...",
+        "expected": "sa",
+        "detected": "hi",
+        "confidence": 0.9,
+        "correct": false
+      }
+    ]
+  },
+  "brx": {
+    "total": 4,
+    "correct": 2,
+    "accuracy": 50.0,
+    "results": [
+      {
+        "text": "नमस्कार, नों कसे आसो? आं बेसी ...",
+        "expected": "brx",
+        "detected": "brx",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "एथे बहुभाषिक सामग्री स्थानीयकर...",
+        "expected": "brx",
+        "detected": "hi",
+        "confidence": 0.9,
+        "correct": false
+      },
+      {
+        "text": "आजि मौसम बेसी बांगो आसो। पार्क...",
+        "expected": "brx",
+        "detected": "brx",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "कृपया आंखौ साहाय्य करो। आंखौ ब...",
+        "expected": "brx",
+        "detected": "hi",
+        "confidence": 0.9,
+        "correct": false
+      }
+    ]
+  },
+  "doi": {
+    "total": 4,
+    "correct": 1,
+    "accuracy": 25.0,
+    "results": [
+      {
+        "text": "नमस्कार, तुसी कैसे हो? मैं ठीक...",
+        "expected": "doi",
+        "detected": "doi",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "ये एक बहुभाषी सामग्री स्थानीयक...",
+        "expected": "doi",
+        "detected": "hi",
+        "confidence": 0.9,
+        "correct": false
+      },
+      {
+        "text": "आज मौसम बहुत अच्छा है। चलो पार...",
+        "expected": "doi",
+        "detected": "ne",
+        "confidence": 0.9,
+        "correct": false
+      },
+      {
+        "text": "कृपया मेरी मदद करो। मुझे समझ न...",
+        "expected": "doi",
+        "detected": "hi",
+        "confidence": 0.9,
+        "correct": false
+      }
+    ]
+  },
+  "ks": {
+    "total": 4,
+    "correct": 3,
+    "accuracy": 75.0,
+    "results": [
+      {
+        "text": "اسلام علیکم، تہِ کیہہ حال چھو؟...",
+        "expected": "ks",
+        "detected": "ks",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "یہ ایک کثیر لسانی مواد مقامی ک...",
+        "expected": "ks",
+        "detected": "ks",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "آج موسم بہت اچھا چھو۔ چلو پارک...",
+        "expected": "ks",
+        "detected": "ks",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "براہ کرم میری مدد کرو۔ مجھے سم...",
+        "expected": "ks",
+        "detected": "ur",
+        "confidence": 0.9,
+        "correct": false
+      }
+    ]
+  },
+  "kok": {
+    "total": 4,
+    "correct": 1,
+    "accuracy": 25.0,
+    "results": [
+      {
+        "text": "नमस्कार, तुमी कशें आसात? हांव ...",
+        "expected": "kok",
+        "detected": "kok",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "हें एक बहुभाषी सामग्री स्थानीय...",
+        "expected": "kok",
+        "detected": "hi",
+        "confidence": 0.9,
+        "correct": false
+      },
+      {
+        "text": "आज मौसम बरें आसा। चलो पार्कांत...",
+        "expected": "kok",
+        "detected": "hi",
+        "confidence": 0.9,
+        "correct": false
+      },
+      {
+        "text": "कृपया म्हाका मजत करात। म्हाका ...",
+        "expected": "kok",
+        "detected": "hi",
+        "confidence": 0.9,
+        "correct": false
+      }
+    ]
+  },
+  "mai": {
+    "total": 4,
+    "correct": 1,
+    "accuracy": 25.0,
+    "results": [
+      {
+        "text": "नमस्कार, अहाँ कहाँ छी? हम ठीक ...",
+        "expected": "mai",
+        "detected": "mai",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "ई एक बहुभाषी सामग्री स्थानीयकर...",
+        "expected": "mai",
+        "detected": "ne",
+        "confidence": 0.9,
+        "correct": false
+      },
+      {
+        "text": "आज मौसम बहुत अच्छा छी। चलो पार...",
+        "expected": "mai",
+        "detected": "ne",
+        "confidence": 0.9,
+        "correct": false
+      },
+      {
+        "text": "कृपया हमरा मदद करूं। हमरा समझ ...",
+        "expected": "mai",
+        "detected": "ne",
+        "confidence": 0.9,
+        "correct": false
+      }
+    ]
+  },
+  "mni": {
+    "total": 4,
+    "correct": 4,
+    "accuracy": 100.0,
+    "results": [
+      {
+        "text": "নমস্কাৰ, নুংগাইদা কদাৱা? ঈ য়া...",
+        "expected": "mni",
+        "detected": "mni",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "ঈগা এগা বহুভাষিক বিষয়বস্তু স্...",
+        "expected": "mni",
+        "detected": "mni",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "নুংগাইদা খুনা বৰ ভাল। পাৰ্কত খ...",
+        "expected": "mni",
+        "detected": "mni",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "অনুগ্ৰহ কৰি ঈগা সহায় কৰোঁ। ঈগ...",
+        "expected": "mni",
+        "detected": "mni",
+        "confidence": 0.9,
+        "correct": true
+      }
+    ]
+  },
+  "sat": {
+    "total": 4,
+    "correct": 0,
+    "accuracy": 0.0,
+    "results": [
+      {
+        "text": "नमस्कार, नों कसे आसो? आं बेसी ...",
+        "expected": "sat",
+        "detected": "brx",
+        "confidence": 0.9,
+        "correct": false
+      },
+      {
+        "text": "एथे बहुभाषिक सामग्री स्थानीयकर...",
+        "expected": "sat",
+        "detected": "hi",
+        "confidence": 0.9,
+        "correct": false
+      },
+      {
+        "text": "आजि मौसम बेसी बांगो आसो। पार्क...",
+        "expected": "sat",
+        "detected": "brx",
+        "confidence": 0.9,
+        "correct": false
+      },
+      {
+        "text": "कृपया आंखौ साहाय्य करो। आंखौ ब...",
+        "expected": "sat",
+        "detected": "hi",
+        "confidence": 0.9,
+        "correct": false
+      }
+    ]
+  },
+  "sd": {
+    "total": 4,
+    "correct": 1,
+    "accuracy": 25.0,
+    "results": [
+      {
+        "text": "سلام علیکم، توهان ڪيئن آهيو؟ م...",
+        "expected": "sd",
+        "detected": "sd",
+        "confidence": 0.9,
+        "correct": true
+      },
+      {
+        "text": "هي هڪ ڪثير لساني مواد مقامي ڪا...",
+        "expected": "sd",
+        "detected": "ur",
+        "confidence": 0.9,
+        "correct": false
+      },
+      {
+        "text": "اڄ موسم تمام چڱو آهي۔ اچو پارڪ...",
+        "expected": "sd",
+        "detected": "ur",
+        "confidence": 0.9,
+        "correct": false
+      },
+      {
+        "text": "مهرباني ڪري مون کي مدد ڏيو۔ مو...",
+        "expected": "sd",
+        "detected": "ur",
+        "confidence": 0.9,
+        "correct": false
+      }
+    ]
+  }
+}

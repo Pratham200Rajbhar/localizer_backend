@@ -65,12 +65,13 @@ class Settings(BaseSettings):
         extra = "ignore"  # Ignore extra environment variables
 
 
-# Supported Indian Languages (22)
+# Supported Languages (22 Indian Languages + English)
 SUPPORTED_LANGUAGES: Dict[str, str] = {
     "as": "Assamese",
     "bn": "Bengali",
     "brx": "Bodo",
     "doi": "Dogri",
+    "en": "English",  # Added English for language detection
     "gu": "Gujarati",
     "hi": "Hindi",
     "kn": "Kannada",

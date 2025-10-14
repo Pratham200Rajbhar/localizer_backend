@@ -156,11 +156,11 @@ async def translate_content(
         # Prepare response
         response = BatchTranslationResponse(
             results=translations,
-            total_translations=len(translations),
-            total_duration=sum(t.duration for t in translations)
+            total_processing_time=sum(t.processing_time for t in translations),
+            localized=any(t.localized for t in translations)
         )
         
-        app_logger.info(f"Translation completed: {len(translations)} translations in {response.total_duration:.2f}s")
+        app_logger.info(f"Translation completed: {len(translations)} translations in {response.total_processing_time:.2f}s")
         
         return response
         
@@ -407,19 +407,19 @@ async def _perform_translations(
             # Skip if source and target are the same
             if source_lang == target_lang:
                 translation_result = {
-                    "translated_text": text,
-                    "source_language": source_lang,
                     "target_language": target_lang,
+                    "translated_text": text,
+                    "confidence": 1.0,
+                    "processing_time": 0.0,
+                    "model_used": "identity",
+                    "source_language": source_lang,
                     "source_language_name": SUPPORTED_LANGUAGES.get(source_lang, source_lang.title()),
                     "target_language_name": SUPPORTED_LANGUAGES.get(target_lang, target_lang.title()),
-                    "model_used": "identity",
-                    "confidence_score": 1.0,
-                    "duration": 0.0,
                     "domain": domain
                 }
             else:
                 # Perform translation
-                engine_result = nlp_engine.translate(
+                engine_result = await nlp_engine.translate(
                     text=text,
                     source_language=source_lang,
                     target_languages=[target_lang],
@@ -432,27 +432,27 @@ async def _perform_translations(
                     
                     # Create properly structured result for TranslationResponse
                     translation_result = {
-                        "translated_text": raw_result.get("translated_text", text),
-                        "source_language": source_lang,
                         "target_language": target_lang,
+                        "translated_text": raw_result.get("translated_text", text),
+                        "confidence": raw_result.get("confidence_score", 0.8),
+                        "processing_time": raw_result.get("translation_time", 0.0),
+                        "model_used": raw_result.get("model_used", "Unknown"),
+                        "source_language": source_lang,
                         "source_language_name": SUPPORTED_LANGUAGES.get(source_lang, source_lang.title()),
                         "target_language_name": SUPPORTED_LANGUAGES.get(target_lang, target_lang.title()),
-                        "model_used": raw_result.get("model_used", "Unknown"),
-                        "confidence_score": raw_result.get("confidence_score", 0.8),
-                        "duration": raw_result.get("translation_time", 0.0),
                         "domain": domain
                     }
                 else:
                     # Fallback if translation failed
                     translation_result = {
-                        "translated_text": text,
-                        "source_language": source_lang,
                         "target_language": target_lang,
+                        "translated_text": text,
+                        "confidence": 0.0,
+                        "processing_time": 0.0,
+                        "model_used": "fallback",
+                        "source_language": source_lang,
                         "source_language_name": SUPPORTED_LANGUAGES.get(source_lang, source_lang.title()),
                         "target_language_name": SUPPORTED_LANGUAGES.get(target_lang, target_lang.title()),
-                        "model_used": "fallback",
-                        "confidence_score": 0.0,
-                        "duration": 0.0,
                         "domain": domain
                     }
             
@@ -467,13 +467,13 @@ async def _perform_translations(
                     )
                     
                     translation_result["translated_text"] = localization_result["localized_content"]
-                    translation_result["localization_applied"] = localization_result["changes_made"]
+                    translation_result["localized"] = localization_result["changes_made"]
                     
                 except Exception as e:
                     app_logger.warning(f"Localization failed for {target_lang}: {e}")
-                    translation_result["localization_applied"] = False
+                    translation_result["localized"] = False
             else:
-                translation_result["localization_applied"] = False
+                translation_result["localized"] = False
             
             # Create translation response
             translation_response = TranslationResponse(**translation_result)
@@ -483,14 +483,14 @@ async def _perform_translations(
             app_logger.error(f"Translation failed for {target_lang}: {e}")
             # Add error result
             error_response = TranslationResponse(
-                translated_text=text,  # Fallback to original text
-                source_language=source_lang,
                 target_language=target_lang,
+                translated_text=text,  # Fallback to original text
+                confidence=0.0,
+                processing_time=0.0,
+                model_used="error",
+                source_language=source_lang,
                 source_language_name=SUPPORTED_LANGUAGES.get(source_lang, source_lang.title()),
                 target_language_name=SUPPORTED_LANGUAGES.get(target_lang, target_lang.title()),
-                model_used="error",
-                confidence_score=0.0,
-                duration=0.0,
                 domain=domain,
                 error=str(e)
             )
@@ -517,8 +517,8 @@ async def _store_translation_records(
                 source_text="",  # Will be set from original text if needed
                 translated_text=translation.translated_text,
                 model_used=translation.model_used,
-                confidence_score=translation.confidence_score,
-                duration=translation.duration,
+                confidence_score=translation.confidence,
+                duration=translation.processing_time,
                 domain=translation.domain
             )
             db.add(db_translation)

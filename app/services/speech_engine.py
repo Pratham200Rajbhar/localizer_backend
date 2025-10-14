@@ -71,6 +71,8 @@ class ProductionSpeechEngine:
         self.device = "cuda" if TORCH_AVAILABLE and torch.cuda.is_available() else "cpu"
         self.whisper_model = None
         self.tts_model = None
+        self.tts_model_name = None
+        self.tts_is_multilingual = False
         self.model_cache = {}
         self.supported_formats = ['.wav', '.mp3', '.mp4', '.m4a', '.flac', '.ogg']
         
@@ -330,9 +332,9 @@ class ProductionSpeechEngine:
             
             # Try different TTS models in order of preference
             model_options = [
-                "tts_models/multilingual/multi-dataset/xtts_v2",
-                "tts_models/en/ljspeech/tacotron2-DDC",
-                "tts_models/en/ljspeech/glow-tts"
+                "tts_models/multilingual/multi-dataset/xtts_v2",  # Multilingual model
+                "tts_models/en/ljspeech/tacotron2-DDC",  # English only
+                "tts_models/en/ljspeech/glow-tts"  # English only
             ]
             
             for model_name in model_options:
@@ -342,8 +344,14 @@ class ProductionSpeechEngine:
                         progress_bar=False,
                         gpu=torch.cuda.is_available() if TORCH_AVAILABLE else False
                     )
+                    
+                    # Store model info for language detection
+                    self.tts_model_name = model_name
+                    self.tts_is_multilingual = "multilingual" in model_name.lower()
+                    
                     load_time = time.time() - start_time
                     app_logger.info(f"TTS model {model_name} loaded successfully in {load_time:.2f}s")
+                    app_logger.info(f"Model is multilingual: {self.tts_is_multilingual}")
                     return True
                     
                 except Exception as model_e:
@@ -384,7 +392,7 @@ class ProductionSpeechEngine:
             # Create output path if not provided
             if not output_path:
                 timestamp = int(time.time())
-                filename = f"tts_output_{timestamp}.wav"
+                filename = f"tts_output_{timestamp}.mp3"
                 output_path = os.path.join(settings.OUTPUT_DIR, filename)
             
             # Ensure output directory exists
@@ -395,23 +403,39 @@ class ProductionSpeechEngine:
             # Try advanced TTS first (VITS/Tacotron2)
             if self.load_tts_model():
                 try:
-                    # Language mapping for advanced TTS
-                    tts_lang_map = {
-                        "hi": "hi", "bn": "bn", "ta": "ta", "te": "te", "mr": "mr",
-                        "gu": "gu", "kn": "kn", "ml": "ml", "pa": "pa", "ur": "ur",
-                        "en": "en"
-                    }
-                    
-                    tts_lang = tts_lang_map.get(language, "en")
-                    
-                    # Generate with VITS
-                    self.tts_model.tts_to_file(
-                        text=text,
-                        language=tts_lang,
-                        file_path=output_path
-                    )
-                    
-                    model_used = "VITS (Advanced TTS)"
+                    # Check if model supports the language
+                    if self.tts_is_multilingual and language != "en":
+                        # Language mapping for multilingual TTS
+                        tts_lang_map = {
+                            "hi": "hi", "bn": "bn", "ta": "ta", "te": "te", "mr": "mr",
+                            "gu": "gu", "kn": "kn", "ml": "ml", "pa": "pa", "ur": "ur",
+                            "en": "en"
+                        }
+                        
+                        tts_lang = tts_lang_map.get(language, "en")
+                        
+                        # Generate with multilingual VITS
+                        self.tts_model.tts_to_file(
+                            text=text,
+                            language=tts_lang,
+                            file_path=output_path
+                        )
+                        
+                        model_used = f"VITS Multilingual ({self.tts_model_name})"
+                        
+                    elif language == "en":
+                        # English-only model or English text
+                        self.tts_model.tts_to_file(
+                            text=text,
+                            file_path=output_path
+                        )
+                        
+                        model_used = f"VITS English ({self.tts_model_name})"
+                        
+                    else:
+                        # Non-English language with English-only model - use fallback
+                        app_logger.warning(f"Model {self.tts_model_name} doesn't support {language}, using gTTS fallback")
+                        return await self._fallback_gtts(text, language, output_path, start_time)
                     
                 except Exception as e:
                     app_logger.warning(f"Advanced TTS failed, falling back to gTTS: {e}")
@@ -463,12 +487,18 @@ class ProductionSpeechEngine:
         
         gtts_lang = tts_lang_map.get(language, "en")
         
+        # Ensure output is MP3 for better compatibility
+        if not output_path.endswith('.mp3'):
+            output_path = output_path.rsplit('.', 1)[0] + '.mp3'
+        
         # Generate speech
         tts = gTTS(text=text, lang=gtts_lang, slow=False)
         tts.save(output_path)
         
         duration = time.time() - start_time
         file_size = os.path.getsize(output_path)
+        
+        app_logger.info(f"gTTS fallback completed in {duration:.2f}s for {language}")
         
         return {
             "output_path": output_path,

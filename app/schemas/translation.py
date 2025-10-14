@@ -35,25 +35,25 @@ class TranslationResponse(BaseModel):
     """Schema for direct translation response"""
     model_config = {"protected_namespaces": ()}
     
-    translated_text: str
-    source_language: str
     target_language: str
-    source_language_name: str
-    target_language_name: str
-    model_used: str
-    confidence_score: float
-    duration: float
+    translated_text: str
+    confidence: float
+    processing_time: float
+    model_used: Optional[str] = None
+    source_language: Optional[str] = None
+    source_language_name: Optional[str] = None
+    target_language_name: Optional[str] = None
     domain: Optional[str] = None
     translation_id: Optional[int] = None
-    localization_applied: Optional[bool] = False
+    localized: Optional[bool] = False
     error: Optional[str] = None
 
 
 class BatchTranslationResponse(BaseModel):
     """Schema for batch translation response"""
     results: List[TranslationResponse]
-    total_translations: int
-    total_duration: float
+    total_processing_time: float
+    localized: bool
 
 
 class LanguageDetectionResponse(BaseModel):

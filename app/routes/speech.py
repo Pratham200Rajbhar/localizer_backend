@@ -103,12 +103,10 @@ async def speech_to_text(
         
         return STTResponse(
             transcript=result["text"],
-            language_detected=result["language"], 
-            language_name=language_name,
+            language=result["language"],
             confidence=result["confidence"],
-            duration=result["duration"],
-            segments=result["segments"],
-            model_used="whisper-large-v3"
+            processing_time=result.get("processing_time", result.get("duration", 0.0)),
+            audio_duration=result["duration"]
         )
     
     except ValueError as e:
@@ -177,12 +175,11 @@ async def text_to_speech(
         language_name = SUPPORTED_LANGUAGES.get(result["language"], result["language"].title())
         
         return TTSResponse(
-            audio_path=result["output_path"],
+            status="success",
+            output_file=result["output_path"],
+            duration=result.get("file_size_mb", 0.0) * 1024 * 1024,  # Convert MB to bytes for duration estimate
             language=result["language"],
-            language_name=language_name,
-            duration=result["generation_time"],
-            generation_time=result["generation_time"],
-            format="mp3"
+            processing_time=result["generation_time"]
         )
     
     except ValueError as e:
@@ -264,7 +261,7 @@ async def audio_localization(
         from app.services.nlp_engine import AdvancedNLPEngine
         nlp_engine = AdvancedNLPEngine()
         
-        translation_result = nlp_engine.translate(
+        translation_result = await nlp_engine.translate(
             text=source_text,
             source_language=detected_language,
             target_languages=[target_language],
@@ -490,7 +487,7 @@ async def audio_localization(
         
         # Step 2: Translation
         app_logger.info(f"Step 2: Translating from {detected_language} to {target_language}...")
-        translation_result = nlp_engine.translate(
+        translation_result = await nlp_engine.translate(
             text=source_text,
             source_language=detected_language,
             target_languages=[target_language],
@@ -524,8 +521,8 @@ async def audio_localization(
         
         # Clean up temporary files
         os.unlink(temp_audio_path)
-        if os.path.exists(tts_result["audio_path"]):
-            os.unlink(tts_result["audio_path"])
+        if os.path.exists(tts_result["output_path"]):
+            os.unlink(tts_result["output_path"])
         
         app_logger.info(f"Audio localization completed in {processing_time:.2f}s")
         

@@ -214,21 +214,38 @@ class VideoProcessor:
         try:
             app_logger.info(f"Merging video with subtitles: {video_path} + {subtitle_path}")
             
+            # Normalize paths for cross-platform compatibility
+            video_path = os.path.normpath(video_path)
+            subtitle_path = os.path.normpath(subtitle_path)
+            output_path = os.path.normpath(output_path)
+            
+            # Escape subtitle path for ffmpeg (especially important on Windows)
+            if os.name == 'nt':  # Windows
+                # Replace backslashes with forward slashes and escape colons
+                escaped_subtitle_path = subtitle_path.replace('\\', '/').replace(':', '\\:')
+            else:  # Unix-like systems
+                escaped_subtitle_path = subtitle_path.replace(':', '\\:')
+            
             if FFMPEG_PYTHON_AVAILABLE:
                 # Use ffmpeg-python library
                 input_video = ffmpeg.input(video_path)
                 output = ffmpeg.output(
                     input_video, 
                     output_path,
-                    vf=f"subtitles={subtitle_path}",
+                    vf=f"subtitles='{escaped_subtitle_path}'",
                     acodec='copy'  # Copy audio without re-encoding
                 )
-                ffmpeg.run(output, quiet=True, overwrite_output=True)
+                try:
+                    ffmpeg.run(output, quiet=True, overwrite_output=True)
+                except ffmpeg.Error as e:
+                    app_logger.error(f"FFmpeg-python error: {e}")
+                    app_logger.error(f"FFmpeg stderr: {e.stderr.decode() if e.stderr else 'No stderr'}")
+                    raise
             else:
                 # Use subprocess fallback
                 cmd = [
                     'ffmpeg', '-i', video_path,
-                    '-vf', f"subtitles={subtitle_path}",
+                    '-vf', f"subtitles='{escaped_subtitle_path}'",
                     '-acodec', 'copy',  # Copy audio
                     '-y',  # Overwrite output
                     output_path
@@ -236,6 +253,8 @@ class VideoProcessor:
                 
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
                 if result.returncode != 0:
+                    app_logger.error(f"FFmpeg stderr: {result.stderr}")
+                    app_logger.error(f"FFmpeg stdout: {result.stdout}")
                     raise subprocess.CalledProcessError(result.returncode, cmd, result.stderr)
             
             # Verify output file exists

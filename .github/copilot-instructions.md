@@ -7,13 +7,13 @@ alwaysApply: true
 
 Develop a **complete, production-ready backend system** using **FastAPI** that combines:
 
-1. AI-Powered Multilingual Translation & Localization (for 22 Indian languages only)  
-2. Cultural & Domain Adaptation  
-3. Speech-to-Text (STT) + Text-to-Speech (TTS) for accessibility  
-4. Feedback-based model evaluation & continuous retraining  
-5. Full local storage (no AWS or cloud dependencies)  
-6. PostgreSQL database persistence  
-7. Simple user authentication (no password hashing) with role-based access (Admin, Uploader, Reviewer)
+1. Automatically translate **vocational skill training materials** (text, audio, and video) into **22 Indian languages**.  
+2. Ensure **contextual and domain-specific accuracy** using skill-sector vocabulary banks.  
+3. Adapt content **culturally and regionally** for localized learning experiences.  
+4. Provide **Speech-to-Text (STT)** and **Text-to-Speech (TTS)** for accessibility.  
+5. Continuously improve translation quality via **AI/ML retraining loops**.  
+6. Offer **integration APIs** for **LMS, Skill India Digital, NCVET, and MSDE** platforms.  
+7. Maintain **local data storage and processing** (no external cloud dependencies).  
 
 All models and assets must run **locally** on a **DigitalOcean Linux server** — GPU optional but supported.
 
@@ -163,26 +163,6 @@ Example:
 | `evaluations`  | id, file_id, bleu, comet, created_at                |
 
 > **Note:** passwords are stored as plain text for internal use only (no hashing/bcrypt).
-
----
-
-## 🔌 API ENDPOINTS
-
-| Endpoint               | Method | Description                          |
-| :--------------------- | :----- | :----------------------------------- |
-| `/auth/register`       | POST   | Register user (admin only)           |
-| `/auth/login`          | POST   | User login + JWT                     |
-| `/content/upload`      | POST   | Upload file to `/uploads`            |
-| `/detect-language`     | POST   | Auto-detect source language          |
-| `/translate`           | POST   | Translate to target languages        |
-| `/localize/context`    | POST   | Apply domain & cultural localization |
-| `/speech/stt`          | POST   | Speech → Text (Whisper)              |
-| `/speech/tts`          | POST   | Text → Speech (VITS/TTS)             |
-| `/feedback`            | POST   | Store user feedback                  |
-| `/evaluate/run`        | POST   | Compute BLEU/COMET score             |
-| `/retrain/trigger`     | POST   | Launch retraining pipeline           |
-| `/supported-languages` | GET    | Return supported language codes      |
-| `/metrics`             | GET    | Prometheus metrics                   |
 
 ---
 

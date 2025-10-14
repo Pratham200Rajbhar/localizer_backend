@@ -121,7 +121,7 @@ async def video_localization(
         nlp_engine = AdvancedNLPEngine()
         
         # Translate full text
-        translation_result = nlp_engine.translate(
+        translation_result = await nlp_engine.translate(
             text=source_text,
             source_language=detected_language,
             target_languages=[target_language],
@@ -197,7 +197,7 @@ async def video_localization(
                 output_format="wav"
             )
             
-            dubbed_audio_path = tts_result["audio_path"]
+            dubbed_audio_path = tts_result["output_path"]
             temp_files.append(dubbed_audio_path)
             
             # Merge video with dubbed audio
