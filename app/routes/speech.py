@@ -331,7 +331,9 @@ async def audio_localization(
 async def generate_subtitles(
     file: UploadFile = File(...),
     language: Optional[str] = Form(None),
-    format: str = Form("srt")  # srt or txt
+    target_language: Optional[str] = Form(None),
+    format: str = Form("srt"),  # srt or txt
+    domain: Optional[str] = Form("general")
 ):
     """
     Generate subtitles/captions from audio for accessibility
@@ -376,14 +378,78 @@ async def generate_subtitles(
             language=language
         )
         
+        detected_language = transcript_result.get("language", "unknown")
+        segments = transcript_result.get("segments", [])
+        
+        # Translate segments if target language is specified
+        if target_language and target_language != detected_language:
+            app_logger.info(f"Translating subtitles from {detected_language} to {target_language}")
+            
+            # Validate target language
+            if target_language not in SUPPORTED_LANGUAGES and target_language != "en":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Target language '{target_language}' not supported"
+                )
+            
+            # Import NLP engine for translation
+            from app.services.nlp_engine import AdvancedNLPEngine
+            nlp_engine = AdvancedNLPEngine()
+            
+            # Translate each segment
+            translated_segments = []
+            for i, segment in enumerate(segments):
+                if segment.get("text", "").strip():
+                    try:
+                        # Translate segment
+                        translation_result = await nlp_engine.translate(
+                            text=segment["text"].strip(),
+                            source_language=detected_language,
+                            target_languages=[target_language],
+                            domain=domain
+                        )
+                        
+                        # Extract translated text
+                        if translation_result["translations"] and len(translation_result["translations"]) > 0:
+                            translated_text = translation_result["translations"][0].get("translated_text", segment["text"].strip())
+                        else:
+                            translated_text = segment["text"].strip()  # Fallback
+                        
+                        # Create translated segment
+                        translated_segments.append({
+                            "start": segment["start"],
+                            "end": segment["end"],
+                            "text": translated_text
+                        })
+                        
+                        app_logger.debug(f"Segment {i+1} translated: '{segment['text'].strip()}' → '{translated_text}'")
+                        
+                    except Exception as e:
+                        app_logger.warning(f"Failed to translate segment {i+1}: {e}")
+                        # Use original segment as fallback
+                        translated_segments.append(segment)
+                else:
+                    translated_segments.append(segment)
+            
+            # Update transcript result with translated segments
+            transcript_result["segments"] = translated_segments
+            transcript_result["language"] = target_language
+            transcript_result["translated"] = True
+            transcript_result["original_language"] = detected_language
+            
+            app_logger.info(f"Translation completed: {len(translated_segments)} segments translated")
+        
         # Generate subtitle content
         if format == "srt":
             subtitle_content = speech_engine.generate_srt_subtitles(transcript_result)
         else:  # txt format
             subtitle_content = speech_engine.generate_text_transcript(transcript_result)
         
-        # Save subtitle file
-        output_filename = f"subtitles_{format}_{int(time.time())}.{format}"
+        # Save subtitle file with target language in filename if translated
+        if target_language and target_language != detected_language:
+            output_filename = f"subtitles_{detected_language}_to_{target_language}_{format}_{int(time.time())}.{format}"
+        else:
+            output_filename = f"subtitles_{format}_{int(time.time())}.{format}"
         output_path = os.path.join(settings.OUTPUT_DIR, output_filename)
         
         # Ensure output directory exists
@@ -401,13 +467,16 @@ async def generate_subtitles(
             "status": "success",
             "message": "Subtitles generated successfully",
             "input_file": file.filename,
-            "detected_language": transcript_result.get("language", "unknown"),
+            "detected_language": transcript_result.get("original_language", transcript_result.get("language", "unknown")),
+            "target_language": target_language if target_language else transcript_result.get("language", "unknown"),
+            "translated": transcript_result.get("translated", False),
             "format": format,
             "output_file": output_filename,
             "output_path": f"/storage/outputs/{output_filename}",
             "subtitle_content": subtitle_content[:500] + "..." if len(subtitle_content) > 500 else subtitle_content,
             "duration_seconds": transcript_result.get("duration", 0),
-            "segment_count": len(transcript_result.get("segments", []))
+            "segment_count": len(transcript_result.get("segments", [])),
+            "domain": domain
         }
         
     except Exception as e:

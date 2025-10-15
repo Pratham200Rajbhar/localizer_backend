@@ -6,7 +6,7 @@ import os
 import time
 import tempfile
 import asyncio
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, List
 from pathlib import Path
 
 # Core dependencies
@@ -580,7 +580,7 @@ class ProductionSpeechEngine:
 
     def generate_srt_subtitles(self, transcript_result: Dict) -> str:
         """
-        Generate SRT format subtitles from Whisper transcript result
+        Advanced SRT subtitle generation with intelligent processing
         
         Args:
             transcript_result: Result from speech_to_text_with_timestamps
@@ -592,9 +592,12 @@ class ProductionSpeechEngine:
         if not segments:
             return ""
         
+        # Advanced subtitle processing
+        processed_segments = self._process_subtitle_segments(segments)
+        
         srt_content = []
         
-        for i, segment in enumerate(segments, 1):
+        for i, segment in enumerate(processed_segments, 1):
             start_time = self._seconds_to_srt_time(segment["start"])
             end_time = self._seconds_to_srt_time(segment["end"])
             text = segment["text"].strip()
@@ -606,6 +609,129 @@ class ProductionSpeechEngine:
                 srt_content.append("")  # Empty line between segments
         
         return "\n".join(srt_content)
+    
+    def _process_subtitle_segments(self, segments: List[Dict]) -> List[Dict]:
+        """
+        Advanced subtitle segment processing with optimization
+        """
+        if not segments:
+            return []
+        
+        processed_segments = []
+        
+        for segment in segments:
+            # Clean and optimize text
+            text = segment.get("text", "").strip()
+            if not text:
+                continue
+            
+            # Apply text optimization
+            optimized_text = self._optimize_subtitle_text(text)
+            
+            # Calculate optimal timing
+            start_time = segment.get("start", 0.0)
+            end_time = segment.get("end", 0.0)
+            
+            # Adjust timing for better readability
+            adjusted_timing = self._adjust_subtitle_timing(start_time, end_time, optimized_text)
+            
+            processed_segments.append({
+                "start": adjusted_timing["start"],
+                "end": adjusted_timing["end"],
+                "text": optimized_text,
+                "original_text": text,
+                "confidence": segment.get("confidence", 1.0)
+            })
+        
+        # Merge very short segments for better readability
+        merged_segments = self._merge_short_segments(processed_segments)
+        
+        return merged_segments
+    
+    def _optimize_subtitle_text(self, text: str) -> str:
+        """
+        Optimize subtitle text for better readability
+        """
+        import re
+        
+        # Remove excessive punctuation
+        text = re.sub(r'[.]{2,}', '...', text)  # Multiple periods to ellipsis
+        text = re.sub(r'[!]{2,}', '!', text)    # Multiple exclamations to single
+        text = re.sub(r'[?]{2,}', '?', text)    # Multiple questions to single
+        
+        # Fix common speech recognition errors
+        text = re.sub(r'\b(uh|um|er|ah)\b', '', text, flags=re.IGNORECASE)  # Remove filler words
+        text = re.sub(r'\s+', ' ', text)  # Remove extra spaces
+        
+        # Capitalize first letter of sentences
+        sentences = re.split(r'([.!?]+)', text)
+        capitalized_sentences = []
+        
+        for i, part in enumerate(sentences):
+            if i % 2 == 0:  # Text parts
+                if part.strip():
+                    capitalized_sentences.append(part.strip().capitalize())
+            else:  # Punctuation parts
+                capitalized_sentences.append(part)
+        
+        text = ''.join(capitalized_sentences)
+        
+        return text.strip()
+    
+    def _adjust_subtitle_timing(self, start_time: float, end_time: float, text: str) -> Dict[str, float]:
+        """
+        Adjust subtitle timing for optimal readability
+        """
+        duration = end_time - start_time
+        text_length = len(text)
+        
+        # Minimum display time based on text length (reading speed: ~3 chars/second)
+        min_duration = max(text_length / 3.0, 1.0)  # At least 1 second
+        
+        # Maximum display time (reading speed: ~1.5 chars/second)
+        max_duration = text_length / 1.5
+        
+        # Adjust duration if needed
+        if duration < min_duration:
+            # Extend end time
+            end_time = start_time + min_duration
+        elif duration > max_duration:
+            # Shorten end time
+            end_time = start_time + max_duration
+        
+        return {
+            "start": start_time,
+            "end": end_time
+        }
+    
+    def _merge_short_segments(self, segments: List[Dict], min_duration: float = 1.0) -> List[Dict]:
+        """
+        Merge very short segments for better readability
+        """
+        if not segments:
+            return []
+        
+        merged_segments = []
+        current_segment = None
+        
+        for segment in segments:
+            duration = segment["end"] - segment["start"]
+            
+            if duration < min_duration and current_segment:
+                # Merge with previous segment
+                current_segment["end"] = segment["end"]
+                current_segment["text"] += " " + segment["text"]
+            else:
+                # Start new segment
+                if current_segment:
+                    merged_segments.append(current_segment)
+                current_segment = segment.copy()
+        
+        # Add the last segment
+        if current_segment:
+            merged_segments.append(current_segment)
+        
+        return merged_segments
 
     def generate_text_transcript(self, transcript_result: Dict) -> str:
         """

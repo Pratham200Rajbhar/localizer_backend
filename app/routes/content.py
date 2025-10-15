@@ -6,9 +6,10 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from app.core.db import get_db
 from app.models.file import File as FileModel
-from app.schemas.file import FileResponse
+from app.schemas.file import FileResponse, FileUploadResponse
 from app.utils.file_manager import file_manager
 from app.utils.logger import app_logger
+from app.utils.text_extractor import text_extractor
 
 router = APIRouter(prefix="/content", tags=["Content"])
 
@@ -75,12 +76,49 @@ async def upload_simple(
         
         app_logger.info(f"File uploaded: {file_id} - {file.filename}")
         
+        # Extract text for document files
+        extracted_text = None
+        text_metadata = None
+        extraction_status = "not_applicable"
+        
+        # Check if file is a document that can have text extracted
+        document_extensions = {".txt", ".pdf"}
+        if file_ext in document_extensions:
+            try:
+                app_logger.info(f"Extracting text from {file.filename}")
+                extraction_result = text_extractor.extract_text(str(file_path))
+                
+                extracted_text = extraction_result.get("text", "")
+                text_metadata = {
+                    "word_count": extraction_result.get("word_count", 0),
+                    "char_count": extraction_result.get("char_count", 0),
+                    "pages": extraction_result.get("pages", 1),
+                    "format": extraction_result.get("format", file_ext[1:]),
+                    "encoding": extraction_result.get("encoding"),
+                    "method": extraction_result.get("method")
+                }
+                extraction_status = "success"
+                
+                app_logger.info(f"Text extracted: {len(extracted_text)} characters, {text_metadata['word_count']} words")
+                
+            except Exception as e:
+                app_logger.warning(f"Text extraction failed for {file.filename}: {e}")
+                extraction_status = "failed"
+                text_metadata = {"error": str(e)}
+        
         return {
-            "file_id": file_id,
+            "id": file_id,
+            "file_id": file_id,  # Keep both for backward compatibility
             "filename": file.filename,
             "size": len(content),
             "path": str(file_path),
-            "status": "uploaded"
+            "file_type": file_ext,
+            "content_type": file.content_type,
+            "status": "uploaded",
+            "message": "File uploaded successfully",
+            "extracted_text": extracted_text,
+            "text_metadata": text_metadata,
+            "extraction_status": extraction_status
         }
         
     except Exception as e:
@@ -91,7 +129,7 @@ async def upload_simple(
         )
 
 
-@router.post("/upload", response_model=FileResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/upload", response_model=FileUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_file(
     file: UploadFile = File(...),
     domain: Optional[str] = Form(None),
@@ -99,10 +137,12 @@ async def upload_file(
     db: Session = Depends(get_db)
 ):
     """
-    Upload a content file for translation
+    Upload a content file for translation with text extraction
     
     Supported formats: TXT, PDF, MP3, MP4, WAV, DOCX, DOC, ODT, RTF
     Maximum size: 100 MB
+    
+    Returns file information along with extracted text (for document files)
     """
     # Validate file extension
     file_ext = "." + file.filename.split(".")[-1].lower() if "." in file.filename else ""
@@ -142,11 +182,57 @@ async def upload_file(
         db.commit()
         db.refresh(db_file)
         
-        app_logger.info(
-            f"File uploaded: {file.filename}"
-        )
+        app_logger.info(f"File uploaded: {file.filename}")
         
-        return db_file
+        # Extract text for document files
+        extracted_text = None
+        text_metadata = None
+        extraction_status = "not_applicable"
+        
+        # Check if file is a document that can have text extracted
+        document_extensions = {".txt", ".pdf", ".docx", ".doc", ".odt", ".rtf"}
+        if file_ext in document_extensions:
+            try:
+                app_logger.info(f"Extracting text from {file.filename}")
+                extraction_result = text_extractor.extract_text(saved_file["file_path"])
+                
+                extracted_text = extraction_result.get("text", "")
+                text_metadata = {
+                    "word_count": extraction_result.get("word_count", 0),
+                    "char_count": extraction_result.get("char_count", 0),
+                    "pages": extraction_result.get("pages", 1),
+                    "format": extraction_result.get("format", file_ext[1:]),
+                    "encoding": extraction_result.get("encoding"),
+                    "method": extraction_result.get("method"),
+                    "paragraphs": extraction_result.get("paragraphs"),
+                    "tables": extraction_result.get("tables")
+                }
+                extraction_status = "success"
+                
+                app_logger.info(f"Text extracted: {len(extracted_text)} characters, {text_metadata['word_count']} words")
+                
+            except Exception as e:
+                app_logger.warning(f"Text extraction failed for {file.filename}: {e}")
+                extraction_status = "failed"
+                text_metadata = {"error": str(e)}
+        
+        # Create enhanced response
+        response_data = {
+            "id": db_file.id,
+            "filename": db_file.filename,
+            "original_filename": db_file.original_filename,
+            "path": db_file.path,
+            "file_type": db_file.file_type,
+            "size": db_file.size,
+            "domain": db_file.domain,
+            "source_language": db_file.source_language,
+            "created_at": db_file.created_at,
+            "extracted_text": extracted_text,
+            "text_metadata": text_metadata,
+            "extraction_status": extraction_status
+        }
+        
+        return FileUploadResponse(**response_data)
     
     except Exception as e:
         app_logger.error(f"File upload error: {e}")

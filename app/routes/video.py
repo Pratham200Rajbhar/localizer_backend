@@ -115,6 +115,19 @@ async def video_localization(
         if not source_text.strip():
             raise ValueError("No speech detected in video audio")
         
+        # Always use NLP engine for language detection to ensure accuracy
+        app_logger.info("Using NLP engine for accurate language detection")
+        nlp_engine = AdvancedNLPEngine()
+        language_detection = nlp_engine.detect_language(source_text)
+        detected_language = language_detection.get("detected_language", "en")
+        detection_confidence = language_detection.get("confidence", 0.0)
+        app_logger.info(f"NLP engine detected language: {detected_language} (confidence: {detection_confidence:.2f})")
+        
+        # Log the difference between STT and NLP detection
+        stt_language = stt_result["language"]
+        if stt_language != detected_language:
+            app_logger.warning(f"Language detection mismatch: STT={stt_language}, NLP={detected_language}")
+        
         app_logger.info(f"STT completed: '{source_text[:100]}...' (Language: {detected_language})")
         
         # Step 4: Translate content
@@ -131,19 +144,46 @@ async def video_localization(
         # Extract single language result
         target_result = translation_result["translations"][0]
         translated_text = target_result["translated_text"]
-        confidence_score = target_result.get("confidence_score", 0.0)
+        confidence_score = target_result.get("confidence_score", target_result.get("confidence", 0.8))
         
-        # Translate individual segments for subtitles (simplified for debugging)
+        # Translate individual segments for subtitles
         translated_segments = []
-        for segment in segments:
+        for i, segment in enumerate(segments):
             if segment["text"].strip():
-                # Use simple pass-through for now to avoid translation errors
-                translated_segments.append({
-                    "start": segment["start"],
-                    "end": segment["end"],
-                    "original_text": segment["text"].strip(),
-                    "translated_text": f"[TRANSLATED] {segment['text'].strip()}"
-                })
+                try:
+                    # Translate each segment individually
+                    segment_translation = await nlp_engine.translate(
+                        text=segment["text"].strip(),
+                        source_language=detected_language,
+                        target_languages=[target_language],
+                        domain=domain
+                    )
+                    
+                    # Extract the translated text
+                    if segment_translation["translations"] and len(segment_translation["translations"]) > 0:
+                        segment_result = segment_translation["translations"][0]
+                        translated_text = segment_result.get("translated_text", segment["text"].strip())
+                    else:
+                        translated_text = segment["text"].strip()  # Fallback to original
+                    
+                    translated_segments.append({
+                        "start": segment["start"],
+                        "end": segment["end"],
+                        "original_text": segment["text"].strip(),
+                        "translated_text": translated_text
+                    })
+                    
+                    app_logger.debug(f"Segment {i+1} translated: '{segment['text'].strip()}' → '{translated_text}'")
+                    
+                except Exception as e:
+                    app_logger.warning(f"Failed to translate segment {i+1}: {e}")
+                    # Use original text as fallback
+                    translated_segments.append({
+                        "start": segment["start"],
+                        "end": segment["end"],
+                        "original_text": segment["text"].strip(),
+                        "translated_text": segment["text"].strip()
+                    })
         
         app_logger.info(f"Translation completed: {len(translated_segments)} segments translated")
         

@@ -320,7 +320,55 @@ class AdvancedNLPEngine:
                 "confidence": 0.0
             }
         
-        # First, try script-based detection for Indian languages (more accurate for Indian languages)
+        # First, check if text is clearly English using advanced algorithm
+        is_english, english_confidence = self._is_clearly_english(text)
+        if is_english:
+            app_logger.info(f"Text identified as clearly English (confidence: {english_confidence:.2f})")
+            return {
+                "detected_language": "en",
+                "language_name": "English",
+                "confidence": min(english_confidence, 0.95)  # Use calculated confidence
+            }
+        
+        # Try langdetect for English and other non-Indian languages first
+        if LANGDETECT_AVAILABLE:
+            try:
+                detected = detect(text)
+                app_logger.info(f"langdetect detected: {detected}")
+
+                # Handle English detection with high confidence
+                if detected == "en":
+                    return {
+                        "detected_language": "en",
+                        "language_name": "English",
+                        "confidence": 0.9
+                    }
+
+                # Handle other supported languages (non-Indian)
+                if detected in SUPPORTED_LANGUAGES:
+                    return {
+                        "detected_language": detected,
+                        "language_name": SUPPORTED_LANGUAGES[detected],
+                        "confidence": 0.9
+                    }
+
+                # If langdetect detected unsupported language, check if it's actually English
+                if detected not in SUPPORTED_LANGUAGES and detected != "en":
+                    app_logger.warning(f"langdetect detected unsupported language: {detected}")
+                    # Double-check with our advanced English detection
+                    is_english, english_confidence = self._is_clearly_english(text)
+                    if is_english and english_confidence > 0.6:
+                        app_logger.info(f"Advanced English detection overrides langdetect: {detected} -> en")
+                        return {
+                            "detected_language": "en",
+                            "language_name": "English",
+                            "confidence": english_confidence
+                        }
+                
+            except LangDetectException as e:
+                app_logger.warning(f"langdetect failed: {e}")
+
+        # Try script-based detection for Indian languages (after langdetect)
         script_detected = self._detect_script_based_language(text)
         if script_detected != "unknown":
             app_logger.info(f"Script-based detection: {script_detected}")
@@ -329,42 +377,14 @@ class AdvancedNLPEngine:
                 "language_name": SUPPORTED_LANGUAGES.get(script_detected, script_detected),
                 "confidence": 0.9  # High confidence for script-based detection
             }
-        
-        # Try langdetect for English and other non-Indian languages
-        if LANGDETECT_AVAILABLE:
-            try:
-                detected = detect(text)
-                app_logger.info(f"langdetect detected: {detected}")
-                
-                # Handle English detection
-                if detected == "en":
-                    return {
-                        "detected_language": "en",
-                        "language_name": "English",
-                        "confidence": 0.9
-                    }
-                
-                # Handle other supported languages (non-Indian)
-                if detected in SUPPORTED_LANGUAGES:
-                    return {
-                        "detected_language": detected,
-                        "language_name": SUPPORTED_LANGUAGES[detected],
-                        "confidence": 0.9
-                    }
-                
-                # Handle other languages that might be detected
-                app_logger.warning(f"langdetect detected unsupported language: {detected}")
-                
-            except LangDetectException as e:
-                app_logger.warning(f"langdetect failed: {e}")
-        
+
         # Fallback: Use IndicBERT for classification (if loaded)
         if "indic_bert" in self.loaded_models:
             try:
                 return self._detect_with_indic_bert(text)
             except Exception as e:
                 app_logger.warning(f"IndicBERT detection failed: {e}")
-        
+
         # Try to detect English using simple heuristics
         if self._is_likely_english(text):
             return {
@@ -372,7 +392,7 @@ class AdvancedNLPEngine:
                 "language_name": "English",
                 "confidence": 0.7
             }
-        
+
         # Final fallback to Hindi only if no other method worked
         return {
             "detected_language": "hi",  # Default to Hindi
@@ -399,6 +419,100 @@ class AdvancedNLPEngine:
             "confidence": 0.8
         }
     
+    def _is_clearly_english(self, text: str) -> tuple[bool, float]:
+        """
+        Advanced English detection with confidence scoring
+        Returns (is_english, confidence_score)
+        """
+        if not text or len(text.strip()) < 3:
+            return False, 0.0
+
+        # Multi-factor English detection algorithm
+        confidence_factors = []
+        
+        # Factor 1: ASCII character ratio
+        ascii_chars = sum(1 for c in text if ord(c) < 128)
+        ascii_ratio = ascii_chars / len(text) if text else 0
+        ascii_confidence = min(ascii_ratio * 1.2, 1.0)  # Boost high ASCII ratios
+        confidence_factors.append(ascii_confidence)
+        
+        # Factor 2: Common English words (weighted by frequency)
+        common_english_words = {
+            "the": 0.3, "and": 0.25, "or": 0.2, "but": 0.2, "in": 0.2, "on": 0.2, "at": 0.2,
+            "to": 0.2, "for": 0.2, "of": 0.2, "with": 0.2, "by": 0.2, "is": 0.2, "are": 0.2,
+            "was": 0.2, "were": 0.2, "be": 0.2, "been": 0.2, "have": 0.2, "has": 0.2, "had": 0.2,
+            "do": 0.2, "does": 0.2, "did": 0.2, "will": 0.2, "would": 0.2, "could": 0.2,
+            "should": 0.2, "may": 0.2, "might": 0.2, "can": 0.2, "this": 0.2, "that": 0.2,
+            "these": 0.2, "those": 0.2, "hello": 0.3, "how": 0.2, "you": 0.2, "what": 0.2,
+            "where": 0.2, "when": 0.2, "why": 0.2, "who": 0.2, "which": 0.2
+        }
+        
+        text_lower = text.lower()
+        word_confidence = 0.0
+        for word, weight in common_english_words.items():
+            if word in text_lower:
+                word_confidence += weight
+        
+        # Normalize word confidence
+        word_confidence = min(word_confidence / 3.0, 1.0)  # Cap at 1.0
+        confidence_factors.append(word_confidence)
+        
+        # Factor 3: English-specific patterns (advanced regex)
+        import re
+        english_patterns = [
+            (r'\b[a-zA-Z]+\b', 0.1),  # English words
+            (r'\d{1,2}:\d{2}\s*(AM|PM|am|pm)', 0.3),  # Time format
+            (r'\b(January|February|March|April|May|June|July|August|September|October|November|December)\b', 0.4),  # Months
+            (r'\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b', 0.4),  # Days
+            (r'\b\d{1,2}/\d{1,2}/\d{2,4}\b', 0.3),  # Date format
+            (r'\b[A-Z][a-z]+\s+[A-Z][a-z]+\b', 0.2),  # Proper names
+            (r'\b(www\.|http://|https://)\b', 0.4),  # URLs
+            (r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b', 0.4)  # Email
+        ]
+        
+        pattern_confidence = 0.0
+        for pattern, weight in english_patterns:
+            if re.search(pattern, text, re.IGNORECASE):
+                pattern_confidence += weight
+        
+        pattern_confidence = min(pattern_confidence, 1.0)
+        confidence_factors.append(pattern_confidence)
+        
+        # Factor 4: Character distribution analysis
+        english_char_distribution = {
+            'e': 0.127, 't': 0.091, 'a': 0.082, 'o': 0.075, 'i': 0.070, 'n': 0.067,
+            's': 0.063, 'h': 0.061, 'r': 0.060, 'd': 0.043, 'l': 0.040, 'c': 0.028,
+            'u': 0.028, 'm': 0.024, 'w': 0.024, 'f': 0.022, 'g': 0.020, 'y': 0.020,
+            'p': 0.019, 'b': 0.015, 'v': 0.010, 'k': 0.008, 'j': 0.001, 'x': 0.001,
+            'q': 0.001, 'z': 0.001
+        }
+        
+        text_chars = text.lower()
+        char_freq = {}
+        for char in text_chars:
+            if char.isalpha():
+                char_freq[char] = char_freq.get(char, 0) + 1
+        
+        if char_freq:
+            total_chars = sum(char_freq.values())
+            distribution_confidence = 0.0
+            for char, expected_freq in english_char_distribution.items():
+                actual_freq = char_freq.get(char, 0) / total_chars
+                # Calculate similarity to expected frequency
+                similarity = 1.0 - abs(actual_freq - expected_freq) / expected_freq
+                distribution_confidence += similarity * expected_freq
+            
+            distribution_confidence = min(distribution_confidence, 1.0)
+            confidence_factors.append(distribution_confidence)
+        
+        # Calculate final confidence score
+        final_confidence = sum(confidence_factors) / len(confidence_factors)
+        
+        # Determine if it's clearly English
+        is_english = final_confidence > 0.7
+        
+        return is_english, final_confidence
+
     def _is_likely_english(self, text: str) -> bool:
         """
         Simple heuristic to detect if text is likely English
@@ -683,21 +797,21 @@ class AdvancedNLPEngine:
                     tgt_lang=tgt_code
                 )
                 
-                # Tokenize
+                # Tokenize with increased length limit
                 inputs = tokenizer(
                     batch,
                     return_tensors="pt",
                     padding=True,
                     truncation=True,
-                    max_length=256
+                    max_length=512  # Increased from 256
                 )
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
                 
-                # Generate
+                # Generate with increased length limit
                 with torch.no_grad():
                     outputs = model.generate(
                         **inputs,
-                        max_length=256,
+                        max_length=512,  # Increased from 256
                         num_beams=4,
                         early_stopping=True,
                         do_sample=False,
@@ -716,12 +830,19 @@ class AdvancedNLPEngine:
                     self.translation_stats["model_usage"][model_key] = \
                         self.translation_stats["model_usage"].get(model_key, 0) + 1
                     
+                    # Calculate advanced quality metrics
+                    quality_metrics = self._calculate_translation_quality(
+                        text, translated_text, source_lang, target_lang
+                    )
+                    
                     return {
                         "translated_text": translated_text.strip(),
                         "model_used": "IndicTrans2",
                         "translation_time": translation_time,
                         "source_language": source_lang,
-                        "target_language": target_lang
+                        "target_language": target_lang,
+                        "confidence_score": quality_metrics["confidence"],
+                        "quality_metrics": quality_metrics
                     }
                 
             except ImportError:
@@ -739,7 +860,7 @@ class AdvancedNLPEngine:
                     return_tensors="pt",
                     padding=True,
                     truncation=True,
-                    max_length=200,
+                    max_length=512,  # Increased from 200
                     add_special_tokens=True
                 )
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
@@ -747,7 +868,7 @@ class AdvancedNLPEngine:
                 with torch.no_grad():
                     outputs = model.generate(
                         **inputs,
-                        max_length=200,
+                        max_length=512,  # Increased from 200
                         num_beams=3,
                         early_stopping=True,
                         do_sample=False,
@@ -771,12 +892,19 @@ class AdvancedNLPEngine:
             self.translation_stats["model_usage"][model_key] = \
                 self.translation_stats["model_usage"].get(model_key, 0) + 1
             
+            # Calculate quality metrics for fallback
+            quality_metrics = self._calculate_translation_quality(
+                text, translated_text, source_lang, target_lang
+            )
+            
             return {
                 "translated_text": translated_text.strip(),
                 "model_used": "IndicTrans2",
                 "translation_time": translation_time,
                 "source_language": source_lang,
-                "target_language": target_lang
+                "target_language": target_lang,
+                "confidence_score": quality_metrics["confidence"],
+                "quality_metrics": quality_metrics
             }
             
         except Exception as e:
@@ -892,7 +1020,7 @@ class AdvancedNLPEngine:
                     return_tensors="pt", 
                     padding=True, 
                     truncation=True,
-                    max_length=256,
+                    max_length=512,  # Increased from 256
                     add_special_tokens=True
                 )
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
@@ -905,7 +1033,7 @@ class AdvancedNLPEngine:
             try:
                 with torch.no_grad():
                     generation_kwargs = {
-                        'max_length': 256,
+                        'max_length': 512,  # Increased from 256
                         'min_length': 5,
                         'num_beams': 5,
                         'early_stopping': True,
@@ -1004,6 +1132,466 @@ class AdvancedNLPEngine:
             app_logger.error(f"LLaMA 3 enhancement failed: {e}")
             raise
 
+    def _split_text_into_chunks(self, text: str, max_chunk_size: int = 400) -> List[str]:
+        """
+        Advanced context-aware text chunking algorithm
+        Uses intelligent splitting to maintain semantic coherence
+        """
+        if len(text) <= max_chunk_size:
+            return [text]
+
+        # Advanced chunking strategy with context preservation
+        chunks = []
+        
+        # First, try to split at natural boundaries (sentences, paragraphs)
+        import re
+        
+        # Split by multiple sentence endings
+        sentence_patterns = [
+            r'\.\s+',  # Period followed by space
+            r'!\s+',   # Exclamation followed by space
+            r'\?\s+',  # Question mark followed by space
+            r'\.\n',   # Period followed by newline
+            r'\n\s*\n' # Double newlines (paragraph breaks)
+        ]
+        
+        # Try each pattern to find the best split points
+        best_splits = []
+        for pattern in sentence_patterns:
+            splits = re.split(pattern, text)
+            if len(splits) > 1:
+                best_splits = splits
+                break
+        
+        if not best_splits:
+            # Fallback to simple sentence splitting
+            best_splits = text.split('. ')
+        
+        # Build chunks with context awareness
+        current_chunk = ""
+        context_buffer = []  # Store recent context for better translation
+        
+        for i, segment in enumerate(best_splits):
+            segment = segment.strip()
+            if not segment:
+                continue
+                
+            # Add context from previous segments (last 2 sentences)
+            context_text = ""
+            if context_buffer:
+                context_text = " ".join(context_buffer[-2:]) + " "
+            
+            # Check if adding this segment would exceed limit
+            potential_chunk = context_text + current_chunk + segment
+            
+            if len(potential_chunk) > max_chunk_size and current_chunk:
+                # Save current chunk
+                chunks.append(current_chunk.strip())
+                
+                # Start new chunk with context
+                current_chunk = context_text + segment
+                context_buffer.append(segment)
+            else:
+                # Add to current chunk
+                if current_chunk:
+                    current_chunk += ". " + segment
+                else:
+                    current_chunk = segment
+                context_buffer.append(segment)
+        
+        # Add the last chunk
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+
+        # Final optimization: merge very small chunks with neighbors
+        optimized_chunks = []
+        i = 0
+        while i < len(chunks):
+            current = chunks[i]
+            
+            # If chunk is too small, try to merge with next chunk
+            if len(current) < 100 and i + 1 < len(chunks):
+                next_chunk = chunks[i + 1]
+                merged = current + ". " + next_chunk
+                if len(merged) <= max_chunk_size:
+                    optimized_chunks.append(merged)
+                    i += 2  # Skip next chunk
+                    continue
+            
+            optimized_chunks.append(current)
+            i += 1
+
+        return optimized_chunks
+
+    def _calculate_translation_quality(self, source_text: str, translated_text: str, 
+                                     source_lang: str, target_lang: str) -> Dict[str, Any]:
+        """
+        Advanced translation quality assessment algorithm
+        """
+        quality_metrics = {
+            "confidence": 0.8,  # Default confidence
+            "length_ratio": 0.0,
+            "character_preservation": 0.0,
+            "language_consistency": 0.0,
+            "semantic_coherence": 0.0
+        }
+        
+        try:
+            # 1. Length ratio analysis
+            source_len = len(source_text.strip())
+            translated_len = len(translated_text.strip())
+            
+            if source_len > 0:
+                length_ratio = translated_len / source_len
+                # Ideal ratio is between 0.5 and 2.0 for most language pairs
+                if 0.5 <= length_ratio <= 2.0:
+                    quality_metrics["length_ratio"] = 1.0
+                elif 0.3 <= length_ratio <= 3.0:
+                    quality_metrics["length_ratio"] = 0.8
+                else:
+                    quality_metrics["length_ratio"] = 0.5
+            
+            # 2. Character preservation (for numbers, symbols, etc.)
+            import re
+            source_numbers = re.findall(r'\d+', source_text)
+            translated_numbers = re.findall(r'\d+', translated_text)
+            
+            if source_numbers:
+                preserved_numbers = sum(1 for num in source_numbers if num in translated_text)
+                quality_metrics["character_preservation"] = preserved_numbers / len(source_numbers)
+            else:
+                quality_metrics["character_preservation"] = 1.0
+            
+            # 3. Language consistency check
+            if target_lang == "hi":
+                # Check for Devanagari script presence
+                devanagari_chars = sum(1 for c in translated_text if '\u0900' <= c <= '\u097F')
+                if devanagari_chars > 0:
+                    quality_metrics["language_consistency"] = min(devanagari_chars / len(translated_text) * 10, 1.0)
+                else:
+                    quality_metrics["language_consistency"] = 0.3
+            elif target_lang == "bn":
+                # Check for Bengali script
+                bengali_chars = sum(1 for c in translated_text if '\u0980' <= c <= '\u09FF')
+                if bengali_chars > 0:
+                    quality_metrics["language_consistency"] = min(bengali_chars / len(translated_text) * 10, 1.0)
+                else:
+                    quality_metrics["language_consistency"] = 0.3
+            else:
+                # For other languages, assume good consistency
+                quality_metrics["language_consistency"] = 0.8
+            
+            # 4. Semantic coherence (basic check)
+            # Check if translation contains common words from source
+            source_words = set(source_text.lower().split())
+            translated_words = set(translated_text.lower().split())
+            
+            # Remove common stop words for better comparison
+            stop_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by"}
+            source_words = source_words - stop_words
+            translated_words = translated_words - stop_words
+            
+            if source_words:
+                # Check for preserved meaning indicators
+                coherence_score = 0.0
+                
+                # Check for proper nouns (capitalized words)
+                source_proper_nouns = [word for word in source_text.split() if word[0].isupper()]
+                preserved_proper_nouns = sum(1 for noun in source_proper_nouns if noun in translated_text)
+                if source_proper_nouns:
+                    coherence_score += (preserved_proper_nouns / len(source_proper_nouns)) * 0.3
+                
+                # Check for numbers and dates
+                source_numbers = re.findall(r'\d+', source_text)
+                preserved_numbers = sum(1 for num in source_numbers if num in translated_text)
+                if source_numbers:
+                    coherence_score += (preserved_numbers / len(source_numbers)) * 0.3
+                
+                # Basic word overlap (for cognates or similar words)
+                word_overlap = len(source_words & translated_words)
+                if source_words:
+                    coherence_score += (word_overlap / len(source_words)) * 0.4
+                
+                quality_metrics["semantic_coherence"] = min(coherence_score, 1.0)
+            else:
+                quality_metrics["semantic_coherence"] = 0.8
+            
+            # Calculate overall confidence score
+            weights = {
+                "length_ratio": 0.2,
+                "character_preservation": 0.2,
+                "language_consistency": 0.3,
+                "semantic_coherence": 0.3
+            }
+            
+            overall_confidence = sum(
+                quality_metrics[metric] * weight 
+                for metric, weight in weights.items()
+            )
+            
+            quality_metrics["confidence"] = min(overall_confidence, 0.95)
+            
+        except Exception as e:
+            app_logger.warning(f"Quality assessment failed: {e}")
+            quality_metrics["confidence"] = 0.7  # Fallback confidence
+        
+        return quality_metrics
+
+    async def _translate_chunk_with_retry(self, chunk: str, chunk_index: int, 
+                                        source_language: str, target_language: str,
+                                        domain: Optional[str] = None,
+                                        use_llama_enhancement: bool = False,
+                                        max_retries: int = 2) -> Dict[str, Any]:
+        """
+        Advanced chunk translation with retry logic and error handling
+        """
+        import asyncio
+        
+        for attempt in range(max_retries + 1):
+            try:
+                result = await self._execute_robust_translation(
+                    text=chunk,
+                    source_language=source_language,
+                    target_language=target_language,
+                    domain=domain,
+                    use_llama_enhancement=use_llama_enhancement
+                )
+                
+                # Add chunk metadata
+                result["chunk_index"] = chunk_index
+                result["attempt"] = attempt + 1
+                
+                return result
+                
+            except Exception as e:
+                if attempt < max_retries:
+                    app_logger.warning(f"Chunk {chunk_index} attempt {attempt + 1} failed: {e}, retrying...")
+                    await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
+                else:
+                    app_logger.error(f"Chunk {chunk_index} failed after {max_retries + 1} attempts: {e}")
+                    # Return fallback result
+                    return {
+                        "translated_text": chunk,  # Use original text as fallback
+                        "model_used": "fallback",
+                        "translation_time": 0.0,
+                        "source_language": source_language,
+                        "target_language": target_language,
+                        "confidence_score": 0.3,
+                        "chunk_index": chunk_index,
+                        "attempt": attempt + 1,
+                        "error": str(e)
+                    }
+    
+    def _combine_translated_chunks(self, translations: List[Dict], original_chunks: List[str]) -> str:
+        """
+        Intelligently combine translated chunks with context preservation
+        """
+        if not translations:
+            return ""
+        
+        combined_parts = []
+        
+        for i, translation in enumerate(translations):
+            translated_text = translation.get("translated_text", "")
+            
+            # Clean up the translated text
+            translated_text = translated_text.strip()
+            
+            # Add appropriate spacing between chunks
+            if i > 0 and combined_parts:
+                # Check if previous chunk ended with punctuation
+                prev_text = combined_parts[-1]
+                if not prev_text.endswith(('.', '!', '?', '।', '।', '।')):
+                    # Add a period if no punctuation
+                    combined_parts[-1] = prev_text + "।"
+            
+            combined_parts.append(translated_text)
+        
+        # Join all parts
+        combined_text = " ".join(combined_parts)
+        
+        # Post-process the combined text
+        combined_text = self._post_process_combined_text(combined_text)
+        
+        return combined_text
+    
+    def _post_process_combined_text(self, text: str) -> str:
+        """
+        Post-process combined text to improve quality
+        """
+        import re
+        
+        # Remove duplicate spaces
+        text = re.sub(r'\s+', ' ', text)
+        
+        # Fix common punctuation issues
+        text = re.sub(r'\s+([।।।!?])', r'\1', text)  # Remove spaces before punctuation
+        text = re.sub(r'([।।।!?])\s*([।।।!?])', r'\1', text)  # Remove duplicate punctuation
+        
+        # Ensure proper sentence spacing
+        text = re.sub(r'([।।।!?])([A-Za-z])', r'\1 \2', text)
+        
+        return text.strip()
+    
+    def _enhance_combined_confidence(self, base_confidence: float, chunk_count: int) -> float:
+        """
+        Enhance confidence score for combined translations
+        """
+        # Reduce confidence slightly for each additional chunk (due to potential context loss)
+        chunk_penalty = min(chunk_count * 0.02, 0.1)  # Max 10% penalty
+        
+        # Apply penalty
+        enhanced_confidence = base_confidence - chunk_penalty
+        
+        # Ensure minimum confidence
+        return max(enhanced_confidence, 0.5)
+    
+    def _optimize_translation_performance(self, text: str, source_lang: str, target_lang: str) -> Dict[str, Any]:
+        """
+        Advanced performance optimization algorithm
+        """
+        optimization_result = {
+            "use_caching": False,
+            "batch_size": 1,
+            "parallel_processing": False,
+            "model_preloading": False,
+            "estimated_time": 0.0
+        }
+        
+        # Analyze text characteristics
+        text_length = len(text)
+        word_count = len(text.split())
+        
+        # Determine optimization strategy based on text characteristics
+        if text_length < 100:
+            # Short text - use direct translation
+            optimization_result["use_caching"] = True
+            optimization_result["estimated_time"] = 2.0
+        elif text_length < 500:
+            # Medium text - use chunking with small batches
+            optimization_result["batch_size"] = 2
+            optimization_result["estimated_time"] = 5.0
+        else:
+            # Long text - use parallel processing
+            optimization_result["parallel_processing"] = True
+            optimization_result["batch_size"] = 3
+            optimization_result["model_preloading"] = True
+            optimization_result["estimated_time"] = 10.0
+        
+        # Language pair optimization
+        if source_lang == "en" and target_lang in SUPPORTED_LANGUAGES:
+            # English to Indian language - optimize for IndicTrans2
+            optimization_result["model_preloading"] = True
+            optimization_result["estimated_time"] *= 0.8  # 20% faster
+        elif source_lang in SUPPORTED_LANGUAGES and target_lang == "en":
+            # Indian language to English - optimize for NLLB
+            optimization_result["estimated_time"] *= 0.9  # 10% faster
+        
+        return optimization_result
+
+    async def _translate_with_chunking(
+        self,
+        text: str,
+        source_language: str,
+        target_languages: List[str],
+        domain: Optional[str] = None,
+        use_llama_enhancement: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Translate long text by splitting it into chunks and translating each chunk
+        """
+        start_time = time.time()
+        
+        # Split text into chunks
+        chunks = self._split_text_into_chunks(text, max_chunk_size=400)
+        app_logger.info(f"Split text into {len(chunks)} chunks for translation")
+        
+        # Translate each chunk
+        all_results = []
+        
+        for target_lang in target_languages:
+            # Validate target language
+            if target_lang not in SUPPORTED_LANGUAGES and target_lang != "en":
+                app_logger.warning(f"Unsupported target language: {target_lang}")
+                all_results.append(self._create_error_result(
+                    text, source_language, target_lang, 
+                    f"Target language '{target_lang}' not supported"
+                ))
+                continue
+            
+            # Skip translation if source and target are the same
+            if source_language == target_lang:
+                all_results.append({
+                    "language": target_lang,
+                    "language_name": SUPPORTED_LANGUAGES.get(target_lang, "English"),
+                    "translated_text": text,
+                    "model_used": "no_translation_needed",
+                    "translation_time": 0.0,
+                    "source_language": source_language,
+                    "target_language": target_lang,
+                    "confidence_score": 1.0
+                })
+                continue
+            
+            # Translate each chunk
+            translated_chunks = []
+            total_confidence = 0.0
+            models_used = set()
+            total_chunk_time = 0.0
+            
+            for i, chunk in enumerate(chunks):
+                try:
+                    app_logger.info(f"Translating chunk {i+1}/{len(chunks)} for {target_lang}")
+                    
+                    chunk_result = await self._execute_robust_translation(
+                        chunk, source_language, target_lang, domain
+                    )
+                    
+                    if chunk_result and chunk_result.get("translated_text"):
+                        translated_chunks.append(chunk_result["translated_text"])
+                        total_confidence += chunk_result.get("confidence_score", 0.8)
+                        models_used.add(chunk_result.get("model_used", "unknown"))
+                        total_chunk_time += chunk_result.get("translation_time", 0.0)
+                    else:
+                        # Fallback: use original chunk if translation failed
+                        translated_chunks.append(chunk)
+                        app_logger.warning(f"Chunk {i+1} translation failed, using original")
+                        
+                except Exception as e:
+                    app_logger.error(f"Chunk {i+1} translation error: {e}")
+                    translated_chunks.append(chunk)  # Use original as fallback
+            
+            # Combine all translated chunks
+            final_translation = " ".join(translated_chunks)
+            avg_confidence = total_confidence / len(chunks) if chunks else 0.0
+            
+            all_results.append({
+                "language": target_lang,
+                "language_name": SUPPORTED_LANGUAGES.get(target_lang, "English"),
+                "translated_text": final_translation,
+                "model_used": f"chunked-{'-'.join(models_used)}",
+                "translation_time": total_chunk_time,
+                "source_language": source_language,
+                "target_language": target_lang,
+                "confidence_score": avg_confidence,
+                "chunks_processed": len(chunks)
+            })
+        
+        total_time = time.time() - start_time
+        successful_translations = len([r for r in all_results if "error" not in r])
+        
+        return {
+            "source_text": text,
+            "source_language": source_language,
+            "target_languages": target_languages,
+            "translations": all_results,
+            "total_translations": successful_translations,
+            "total_time": total_time,
+            "models_used": list(set([r.get("model_used", "unknown") for r in all_results])),
+            "chunked_translation": True,
+            "chunks_count": len(chunks)
+        }
+
     async def translate(
         self,
         text: str,
@@ -1031,6 +1619,17 @@ class AdvancedNLPEngine:
         if source_language not in SUPPORTED_LANGUAGES and source_language != "en":
             app_logger.error(f"Unsupported source language: {source_language}")
             raise ValueError(f"Source language '{source_language}' not supported")
+        
+        # Check if text is too long and needs chunking
+        text_length = len(text)
+        max_single_translation_length = 500  # Characters
+        
+        if text_length > max_single_translation_length:
+            app_logger.info(f"Text is long ({text_length} chars), using chunking for better translation")
+            # Use chunking for long texts
+            return await self._translate_with_chunking(
+                text, source_language, target_languages, domain, use_llama_enhancement
+            )
         
         for target_lang in target_languages:
             # Validate target language
