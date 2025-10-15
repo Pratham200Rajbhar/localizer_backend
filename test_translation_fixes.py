@@ -1,33 +1,190 @@
 #!/usr/bin/env python3
 """
-Test the translation algorithm fixes
+Test script to verify translation and audio translation fixes
 """
 
 import requests
 import json
+import time
 
-def test_english_detection_fix():
-    """Test if English detection is now working correctly"""
-    print("🔍 Testing English Detection Fix")
-    print("=" * 50)
+def test_long_text_translation():
+    """Test translation of long text to ensure no truncation"""
+    print("🔍 Testing Long Text Translation (No Truncation)")
+    print("=" * 60)
+    
+    # Long text that should trigger chunking
+    long_text = """
+    This is a comprehensive test of the translation system to ensure that long texts are properly translated without truncation. 
+    The system should be able to handle documents with multiple paragraphs and complex sentences. 
+    This particular text is designed to exceed the previous limits and test the new chunking system.
+    
+    The translation engine should now be able to process texts up to 1024 characters in a single chunk, 
+    and for longer texts, it should automatically split them into manageable chunks and translate each one separately.
+    
+    This ensures that users get complete translations of their documents, whether they are short messages or long articles.
+    The system should maintain context across chunks and provide high-quality translations for all supported Indian languages.
+    
+    We are testing this with a realistic scenario where a user might want to translate educational content, 
+    technical documentation, or any other lengthy material from English to Hindi, Bengali, Tamil, or any other supported language.
+    """
     
     test_cases = [
         {
-            "text": "Hello, how are you today?",
-            "expected": "en"
+            "name": "Long Text to Hindi",
+            "text": long_text.strip(),
+            "source": "en",
+            "target": "hi"
         },
         {
-            "text": "This is a mixed text with English and हिंदी words.",
-            "expected": "en"  # Should detect dominant language
+            "name": "Long Text to Bengali", 
+            "text": long_text.strip(),
+            "source": "en",
+            "target": "bn"
         },
         {
-            "text": "The computer system is running smoothly.",
-            "expected": "en"
+            "name": "Long Text to Tamil",
+            "text": long_text.strip(),
+            "source": "en", 
+            "target": "ta"
         }
     ]
     
     for test_case in test_cases:
-        print(f"\n📝 Testing: '{test_case['text']}'")
+        print(f"\n📝 Testing: {test_case['name']}")
+        print(f"   Text length: {len(test_case['text'])} characters")
+        
+        try:
+            response = requests.post(
+                "http://localhost:8000/translate",
+                json={
+                    "text": test_case["text"],
+                    "source_language": test_case["source"],
+                    "target_languages": [test_case["target"]],
+                    "domain": "general",
+                    "apply_localization": True
+                },
+                timeout=60
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                
+                if "results" in result and len(result["results"]) > 0:
+                    translation = result["results"][0]
+                    translated_text = translation.get("translated_text", "")
+                    confidence = translation.get("confidence", 0)
+                    processing_time = translation.get("processing_time", 0)
+                    
+                    print(f"   ✅ Translation successful")
+                    print(f"   📊 Confidence: {confidence:.2f}")
+                    print(f"   ⏱️  Processing time: {processing_time:.2f}s")
+                    print(f"   📏 Translated length: {len(translated_text)} characters")
+                    
+                    # Check if translation is complete (not truncated)
+                    if len(translated_text) > 100:  # Should be substantial
+                        print(f"   ✅ Translation appears complete (not truncated)")
+                    else:
+                        print(f"   ⚠️  Translation might be truncated")
+                    
+                    # Show first 100 characters of translation
+                    preview = translated_text[:100] + "..." if len(translated_text) > 100 else translated_text
+                    print(f"   📄 Preview: {preview}")
+                    
+                else:
+                    print(f"   ❌ No translation results in response")
+                    
+            else:
+                print(f"   ❌ HTTP {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            print(f"   ❌ Error: {e}")
+
+def test_audio_translation():
+    """Test audio translation with subtitle generation"""
+    print("\n🔍 Testing Audio Translation (Subtitle Generation)")
+    print("=" * 60)
+    
+    # Test with a sample audio file if available
+    test_file = "testing_files/domo.mp3"  # Adjust path as needed
+    
+    try:
+        with open(test_file, 'rb') as audio_file:
+            files = {"file": audio_file}
+            data = {
+                "language": "en",
+                "target_language": "hi", 
+                "format": "srt",
+                "domain": "general"
+            }
+            
+            print(f"📝 Testing audio file: {test_file}")
+            
+            response = requests.post(
+                "http://localhost:8000/speech/subtitles",
+                files=files,
+                data=data,
+                timeout=120
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                
+                print(f"   ✅ Subtitle generation successful")
+                print(f"   📊 Status: {result.get('status', 'unknown')}")
+                print(f"   🎯 Detected language: {result.get('detected_language', 'unknown')}")
+                print(f"   🎯 Target language: {result.get('target_language', 'unknown')}")
+                print(f"   📝 Translated: {result.get('translated', False)}")
+                print(f"   📄 Format: {result.get('format', 'unknown')}")
+                print(f"   ⏱️  Duration: {result.get('duration_seconds', 0):.2f}s")
+                print(f"   📊 Segments: {result.get('segment_count', 0)}")
+                
+                # Check subtitle content
+                subtitle_content = result.get('subtitle_content', '')
+                if subtitle_content:
+                    print(f"   📏 Subtitle content length: {len(subtitle_content)} characters")
+                    
+                    # Check if content is complete (not truncated)
+                    if len(subtitle_content) > 200:  # Should be substantial
+                        print(f"   ✅ Subtitle content appears complete (not truncated)")
+                    else:
+                        print(f"   ⚠️  Subtitle content might be truncated")
+                    
+                    # Show first 200 characters
+                    preview = subtitle_content[:200] + "..." if len(subtitle_content) > 200 else subtitle_content
+                    print(f"   📄 Content preview: {preview}")
+                else:
+                    print(f"   ⚠️  No subtitle content in response")
+                    
+            else:
+                print(f"   ❌ HTTP {response.status_code}: {response.text}")
+                
+    except FileNotFoundError:
+        print(f"   ⚠️  Test file {test_file} not found, skipping audio test")
+    except Exception as e:
+        print(f"   ❌ Error: {e}")
+
+def test_language_detection():
+    """Test language detection with various texts"""
+    print("\n🔍 Testing Language Detection")
+    print("=" * 60)
+    
+    test_cases = [
+        {
+            "text": "Hello, how are you today? This is a test of the language detection system.",
+            "expected": "en"
+        },
+        {
+            "text": "नमस्ते, आप कैसे हैं? यह भाषा पहचान प्रणाली का परीक्षण है।",
+            "expected": "hi"
+        },
+        {
+            "text": "আমি ভালো আছি, ধন্যবাদ। এটি ভাষা সনাক্তকরণ সিস্টেমের একটি পরীক্ষা।",
+            "expected": "bn"
+        }
+    ]
+    
+    for test_case in test_cases:
+        print(f"\n📝 Testing: '{test_case['text'][:50]}...'")
         print(f"   Expected: {test_case['expected']}")
         
         try:
@@ -41,175 +198,41 @@ def test_english_detection_fix():
                 result = response.json()
                 detected = result.get("detected_language", "unknown")
                 confidence = result.get("confidence", 0)
-                language_name = result.get("language_name", "Unknown")
                 
                 print(f"   ✅ Detection successful")
-                print(f"   📊 Detected: {detected} ({language_name})")
+                print(f"   📊 Detected: {detected}")
                 print(f"   📊 Confidence: {confidence:.2f}")
                 
                 if detected == test_case["expected"]:
-                    print(f"   ✅ Correct detection!")
+                    print(f"   ✅ Correct detection")
                 else:
-                    print(f"   ❌ Incorrect detection (expected: {test_case['expected']})")
+                    print(f"   ⚠️  Incorrect detection (expected {test_case['expected']})")
                     
             else:
-                print(f"   ❌ Detection failed: {response.status_code}")
+                print(f"   ❌ HTTP {response.status_code}: {response.text}")
                 
         except Exception as e:
             print(f"   ❌ Error: {e}")
-
-def test_hindi_to_english_translation():
-    """Test Hindi to English translation with increased timeout"""
-    print(f"\n🔄 Testing Hindi to English Translation")
-    print("=" * 50)
-    
-    test_cases = [
-        {
-            "text": "नमस्ते, आप कैसे हैं?",
-            "expected_keywords": ["hello", "how", "are", "you"]
-        },
-        {
-            "text": "मैं एक छात्र हूँ।",
-            "expected_keywords": ["i", "am", "student"]
-        }
-    ]
-    
-    for test_case in test_cases:
-        print(f"\n📝 Testing: '{test_case['text']}'")
-        
-        try:
-            response = requests.post(
-                "http://localhost:8000/translate",
-                json={
-                    "text": test_case["text"],
-                    "source_language": "hi",
-                    "target_languages": ["en"],
-                    "domain": "general"
-                },
-                timeout=60  # Increased timeout
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                translations = result.get("results", [])
-                
-                if translations:
-                    translation = translations[0]
-                    translated_text = translation.get("translated_text", "")
-                    confidence = translation.get("confidence", 0)
-                    model_used = translation.get("model_used", "unknown")
-                    
-                    print(f"   ✅ Translation successful")
-                    print(f"   📊 Model: {model_used}")
-                    print(f"   📊 Confidence: {confidence:.2f}")
-                    print(f"   📄 Result: {translated_text}")
-                    
-                    # Check for expected keywords
-                    found_keywords = []
-                    for keyword in test_case["expected_keywords"]:
-                        if keyword.lower() in translated_text.lower():
-                            found_keywords.append(keyword)
-                    
-                    if found_keywords:
-                        print(f"   ✅ Found expected keywords: {found_keywords}")
-                    else:
-                        print(f"   ⚠️  No expected keywords found: {test_case['expected_keywords']}")
-                        
-                else:
-                    print(f"   ❌ No translations returned")
-            else:
-                print(f"   ❌ Translation failed: {response.status_code}")
-                print(f"   Response: {response.text}")
-                
-        except Exception as e:
-            print(f"   ❌ Error: {e}")
-
-def test_localization():
-    """Test if localization is working"""
-    print(f"\n🌍 Testing Localization")
-    print("=" * 50)
-    
-    test_cases = [
-        {
-            "text": "Good morning, sir. How may I help you?",
-            "source": "en",
-            "target": "hi",
-            "domain": "business",
-            "expected_honorifics": ["साहब", "जी"]
-        }
-    ]
-    
-    for test_case in test_cases:
-        print(f"\n📝 Testing: '{test_case['text']}'")
-        print(f"   Domain: {test_case['domain']}")
-        
-        try:
-            response = requests.post(
-                "http://localhost:8000/translate",
-                json={
-                    "text": test_case["text"],
-                    "source_language": test_case["source"],
-                    "target_languages": [test_case["target"]],
-                    "domain": test_case["domain"]
-                },
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                translations = result.get("results", [])
-                
-                if translations:
-                    translation = translations[0]
-                    translated_text = translation.get("translated_text", "")
-                    localized = translation.get("localized", False)
-                    confidence = translation.get("confidence", 0)
-                    
-                    print(f"   ✅ Translation successful")
-                    print(f"   📊 Confidence: {confidence:.2f}")
-                    print(f"   📊 Localized: {localized}")
-                    print(f"   📄 Result: {translated_text}")
-                    
-                    # Check for honorifics
-                    found_honorifics = []
-                    for honorific in test_case["expected_honorifics"]:
-                        if honorific in translated_text:
-                            found_honorifics.append(honorific)
-                    
-                    if found_honorifics:
-                        print(f"   ✅ Found honorifics: {found_honorifics}")
-                    else:
-                        print(f"   ⚠️  No honorifics found: {test_case['expected_honorifics']}")
-                        
-                else:
-                    print(f"   ❌ No translations returned")
-            else:
-                print(f"   ❌ Translation failed: {response.status_code}")
-                
-        except Exception as e:
-            print(f"   ❌ Error: {e}")
-
-def main():
-    """Run all translation fix tests"""
-    print("🚀 Testing Translation Algorithm Fixes")
-    print("=" * 70)
-    
-    # Test English detection fix
-    test_english_detection_fix()
-    
-    # Test Hindi to English translation
-    test_hindi_to_english_translation()
-    
-    # Test localization
-    test_localization()
-    
-    print(f"\n" + "=" * 70)
-    print("📊 Translation fix testing completed!")
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\n\n⏹️  Test interrupted by user")
-    except Exception as e:
-        print(f"\n❌ Test failed with error: {e}")
+    print("🧪 Translation and Audio Translation Fixes Test")
+    print("=" * 80)
+    print("Testing the fixes for incomplete translation responses")
+    print("=" * 80)
+    
+    # Test language detection first
+    test_language_detection()
+    
+    # Test long text translation
+    test_long_text_translation()
+    
+    # Test audio translation
+    test_audio_translation()
+    
+    print("\n" + "=" * 80)
+    print("🎯 Test Summary:")
+    print("- Language detection should work correctly")
+    print("- Long text translations should be complete (no truncation)")
+    print("- Audio subtitle generation should return full content")
+    print("- All responses should be comprehensive and complete")
+    print("=" * 80)

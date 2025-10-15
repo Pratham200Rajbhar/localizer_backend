@@ -14,7 +14,9 @@ from app.core.db import init_db
 from app.utils.logger import app_logger
 from app.utils.metrics import get_metrics
 from app.utils.performance import perf_monitor, cleanup_resources
-from app.routes import content, translation, speech, feedback
+from app.routes import content, translation, speech, feedback, logs
+from app.middleware.request_logger import RequestLoggingMiddleware
+from app.utils.server_logger import server_logger
 
 settings = get_settings()
 
@@ -49,10 +51,31 @@ async def lifespan(app: FastAPI):
     
     app_logger.info("Application startup complete")
     
+    # Log server startup
+    server_logger.log_server_activity(
+        activity_type="startup",
+        description="Indian Language Localizer Backend started successfully",
+        details={
+            "version": "1.0.0",
+            "environment": settings.ENVIRONMENT,
+            "supported_languages": 22
+        }
+    )
+    
     yield
     
     # Shutdown
     app_logger.info("Shutting down application...")
+    
+    # Log server shutdown
+    server_logger.log_server_activity(
+        activity_type="shutdown",
+        description="Indian Language Localizer Backend shutting down",
+        details={
+            "uptime_seconds": time.time() - start_time if 'start_time' in locals() else 0
+        }
+    )
+    
     cleanup_resources()
     app_logger.info("Resources cleaned up")
 
@@ -75,6 +98,13 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Request logging middleware
+app.add_middleware(
+    RequestLoggingMiddleware,
+    log_request_body=False,  # Set to True for debugging
+    log_response_body=False  # Set to True for debugging
 )
 
 
@@ -353,6 +383,13 @@ from app.routes import video, assessment, integration
 app.include_router(video.router)
 app.include_router(assessment.router)
 app.include_router(integration.router)
+
+# Add optimized routes for better performance
+from app.routes import optimized_video
+app.include_router(optimized_video.router)
+
+# Add logging routes
+app.include_router(logs.router)
 
 
 if __name__ == "__main__":

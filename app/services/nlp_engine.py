@@ -803,7 +803,7 @@ class AdvancedNLPEngine:
                     return_tensors="pt",
                     padding=True,
                     truncation=True,
-                    max_length=512  # Increased from 256
+                    max_length=1024  # Increased from 512 to handle longer texts
                 )
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
                 
@@ -811,7 +811,7 @@ class AdvancedNLPEngine:
                 with torch.no_grad():
                     outputs = model.generate(
                         **inputs,
-                        max_length=512,  # Increased from 256
+                        max_length=1024,  # Increased from 512 to handle longer texts
                         num_beams=4,
                         early_stopping=True,
                         do_sample=False,
@@ -1020,7 +1020,7 @@ class AdvancedNLPEngine:
                     return_tensors="pt", 
                     padding=True, 
                     truncation=True,
-                    max_length=512,  # Increased from 256
+                    max_length=1024,  # Increased from 512 to handle longer texts
                     add_special_tokens=True
                 )
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
@@ -1033,7 +1033,7 @@ class AdvancedNLPEngine:
             try:
                 with torch.no_grad():
                     generation_kwargs = {
-                        'max_length': 512,  # Increased from 256
+                        'max_length': 1024,  # Increased from 512 to handle longer texts
                         'min_length': 5,
                         'num_beams': 5,
                         'early_stopping': True,
@@ -1114,7 +1114,7 @@ class AdvancedNLPEngine:
             # Generate response
             response = llama_pipeline(
                 prompt,
-                max_length=512,
+                max_length=1024,  # Increased from 512 to handle longer texts
                 temperature=0.7,
                 do_sample=True,
                 top_p=0.9
@@ -1503,7 +1503,7 @@ class AdvancedNLPEngine:
         start_time = time.time()
         
         # Split text into chunks
-        chunks = self._split_text_into_chunks(text, max_chunk_size=400)
+        chunks = self._split_text_into_chunks(text, max_chunk_size=600)  # Increased from 400
         app_logger.info(f"Split text into {len(chunks)} chunks for translation")
         
         # Translate each chunk
@@ -1622,7 +1622,7 @@ class AdvancedNLPEngine:
         
         # Check if text is too long and needs chunking
         text_length = len(text)
-        max_single_translation_length = 500  # Characters
+        max_single_translation_length = 800  # Characters - increased from 500
         
         if text_length > max_single_translation_length:
             app_logger.info(f"Text is long ({text_length} chars), using chunking for better translation")

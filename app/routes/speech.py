@@ -268,10 +268,20 @@ async def audio_localization(
             domain=domain
         )
         
-        # Extract single language result
-        target_result = translation_result["translations"][0]
-        translated_text = target_result["translated_text"]
-        confidence_score = target_result.get("confidence_score", 0.0)
+        # Extract single language result with better error handling
+        if "translations" in translation_result and translation_result["translations"]:
+            target_result = translation_result["translations"][0]
+            translated_text = target_result.get("translated_text", source_text)
+            confidence_score = target_result.get("confidence_score", 0.0)
+        elif "translated_text" in translation_result:
+            # Handle direct translation result format
+            translated_text = translation_result["translated_text"]
+            confidence_score = translation_result.get("confidence_score", 0.0)
+        else:
+            # Fallback to original text if translation fails
+            app_logger.warning("Translation result format not recognized, using original text")
+            translated_text = source_text
+            confidence_score = 0.0
         
         app_logger.info(f"Translation completed: '{translated_text[:100]}...' (Confidence: {confidence_score})")
         
@@ -409,9 +419,13 @@ async def generate_subtitles(
                             domain=domain
                         )
                         
-                        # Extract translated text
-                        if translation_result["translations"] and len(translation_result["translations"]) > 0:
+                        # Extract translated text - handle both old and new response formats
+                        if "translations" in translation_result and translation_result["translations"] and len(translation_result["translations"]) > 0:
+                            # New format with translations array
                             translated_text = translation_result["translations"][0].get("translated_text", segment["text"].strip())
+                        elif "translated_text" in translation_result:
+                            # Direct format
+                            translated_text = translation_result["translated_text"]
                         else:
                             translated_text = segment["text"].strip()  # Fallback
                         
@@ -473,7 +487,7 @@ async def generate_subtitles(
             "format": format,
             "output_file": output_filename,
             "output_path": f"/storage/outputs/{output_filename}",
-            "subtitle_content": subtitle_content[:500] + "..." if len(subtitle_content) > 500 else subtitle_content,
+            "subtitle_content": subtitle_content,  # Return full content without truncation
             "duration_seconds": transcript_result.get("duration", 0),
             "segment_count": len(transcript_result.get("segments", [])),
             "domain": domain
@@ -556,6 +570,9 @@ async def audio_localization(
         
         # Step 2: Translation
         app_logger.info(f"Step 2: Translating from {detected_language} to {target_language}...")
+        app_logger.info(f"Source text length: {len(source_text)} characters")
+        app_logger.info(f"Source text preview: {source_text[:100]}...")
+        
         translation_result = await nlp_engine.translate(
             text=source_text,
             source_language=detected_language,
@@ -563,10 +580,29 @@ async def audio_localization(
             domain=domain
         )
         
-        # Extract single language result
-        target_result = translation_result["translations"][0]
-        translated_text = target_result["translated_text"]
-        confidence_score = target_result.get("confidence_score", 0.0)
+        app_logger.info(f"Translation result keys: {list(translation_result.keys())}")
+        if "translations" in translation_result:
+            app_logger.info(f"Number of translations: {len(translation_result['translations'])}")
+        
+        # Extract single language result with better error handling
+        if "translations" in translation_result and translation_result["translations"]:
+            target_result = translation_result["translations"][0]
+            translated_text = target_result.get("translated_text", source_text)
+            confidence_score = target_result.get("confidence_score", 0.0)
+            app_logger.info(f"Extracted translation from translations array: {translated_text[:100]}...")
+        elif "translated_text" in translation_result:
+            # Handle direct translation result format
+            translated_text = translation_result["translated_text"]
+            confidence_score = translation_result.get("confidence_score", 0.0)
+            app_logger.info(f"Extracted translation from direct format: {translated_text[:100]}...")
+        else:
+            # Fallback to original text if translation fails
+            app_logger.warning("Translation result format not recognized, using original text")
+            translated_text = source_text
+            confidence_score = 0.0
+        
+        app_logger.info(f"Final translated text length: {len(translated_text)} characters")
+        app_logger.info(f"Final translated text: {translated_text}")
         
         # Step 3: Text-to-Speech
         app_logger.info("Step 3: Converting translated text to speech...")
@@ -604,11 +640,11 @@ async def audio_localization(
             "pipeline_steps": {
                 "stt": {
                     "detected_language": detected_language,
-                    "transcribed_text": source_text[:200] + "..." if len(source_text) > 200 else source_text,
+                    "transcribed_text": source_text,  # Return full text without truncation
                     "duration_seconds": stt_result.get("duration", 0)
                 },
                 "translation": {
-                    "translated_text": translated_text[:200] + "..." if len(translated_text) > 200 else translated_text,
+                    "translated_text": translated_text,  # Return full translation without truncation
                     "confidence_score": confidence_score
                 },
                 "tts": {
